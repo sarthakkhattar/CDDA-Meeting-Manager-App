@@ -1,0 +1,9 @@
+# Lilly policy: install through JFrog Artifactory, not public PyPI.
+# Configure the index once (Artifactory | Developer Platform Front Door has the
+# exact URL and token setup for your account), e.g. via pip.conf / PIP_INDEX_URL,
+# then run: pip install -r requirements.txt
+dash==2.18.2
+Flask==3.0.3
+gunicorn==22.0.0
+requests==2.32.3
+python-dotenv==1.0.1
