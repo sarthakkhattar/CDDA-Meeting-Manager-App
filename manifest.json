@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "locale": "en_US.UTF-8",
+  "metadata": {
+    "appmode": "python-dash",
+    "entrypoint": "app:server"
+  },
+  "python": {
+    "version": "3.12.3",
+    "package_manager": {
+      "name": "pip",
+      "version": "24.0",
+      "package_file": "requirements.txt"
+    }
+  },
+  "files": {
+    "app.py": {
+      "checksum": "d137bc8d89c2a4e3375d4ec99223947f"
+    },
+    "config.py": {
+      "checksum": "fecafd1ebf6fcc8c5085bba38994c5a8"
+    },
+    "sharepoint_client.py": {
+      "checksum": "edac28f69ee540f9c691232c6dfd4fa5"
+    },
+    "ad_access.py": {
+      "checksum": "7433135cd21daf8e2b50100bb9d7a0f0"
+    },
+    "theme.py": {
+      "checksum": "2b6730f91631e058bde90069efd14df0"
+    },
+    "requirements.txt": {
+      "checksum": "429473430c713464c6af0e74886d2772"
+    },
+    "gunicorn.conf.py": {
+      "checksum": "1c569be221bc3e706ca3f9e9ce05c519"
+    }
+  }
+}
