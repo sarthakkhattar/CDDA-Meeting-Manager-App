@@ -19,7 +19,6 @@ Endpoints:
 
 from flask import Flask, jsonify, request
 import os
-import fabric_graph as fabric
 import config
 
 server = Flask(__name__, static_folder='static', static_url_path='/static')
@@ -50,14 +49,15 @@ def serve_root():
 @app.route('/api/health')
 def health():
     """Health check endpoint."""
-    data_layer = fabric.get_data_layer()
-    return jsonify({
-        'status': 'ok',
-        'message': 'CDDA Meeting Manager running',
-        'fabric': data_layer.health(),
-        'demo_mode': config.DEMO_MODE,
-        'environment': config.APP_ENVIRONMENT
-    })
+    try:
+        return jsonify({
+            'status': 'ok',
+            'message': 'CDDA Meeting Manager running',
+            'demo_mode': config.DEMO_MODE,
+            'environment': config.APP_ENVIRONMENT
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # ============================================================================
 # Meetings API
@@ -67,8 +67,23 @@ def health():
 def get_meetings():
     """Get all meetings."""
     try:
-        data_layer = fabric.get_data_layer()
-        meetings = data_layer.get_meetings()
+        # Demo data for now
+        meetings = [
+            {
+                'id': 'mtg_1',
+                'title': 'CDDA Open Office Hours',
+                'description': 'Regular forum for open discussions',
+                'forum': 'ooh',
+                'duration': 60,
+            },
+            {
+                'id': 'mtg_2',
+                'title': 'Clinical Design & Statistics Review',
+                'description': 'Review forum for clinical design',
+                'forum': 'cdsr',
+                'duration': 90,
+            }
+        ]
         return jsonify({'success': True, 'data': meetings, 'count': len(meetings)})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
