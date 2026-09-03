@@ -3,7 +3,7 @@ CDDA Meeting Manager - Fabric Lakehouse Backend.
 Flask app that manages meeting agendas with data in Fabric.
 """
 
-from flask import Flask, send_file
+from flask import Flask, send_file, jsonify
 import os
 
 server = Flask(__name__, static_folder='static', static_url_path='/static')
@@ -24,7 +24,7 @@ def serve_root():
 @app.route('/api/health')
 def health():
     """Health check."""
-    return {'status': 'ok', 'message': 'CDDA Meeting Manager running'}
+    return jsonify({'status': 'ok', 'message': 'CDDA Meeting Manager running'})
 
 if __name__ == "__main__":
     server.run(debug=True, port=8050)
