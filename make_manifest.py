@@ -29,7 +29,7 @@ manifest = {
     'version': 1,
     'locale': 'en_US.UTF-8',
     'metadata': {
-        'appmode': 'python-flask',
+        'appmode': 'python-api',
         'entrypoint': 'app:server'
     },
     'python': {
