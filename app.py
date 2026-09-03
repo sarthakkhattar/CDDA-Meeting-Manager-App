@@ -6,8 +6,8 @@ Flask app that manages meeting agendas with data in Fabric.
 from flask import Flask, send_file
 import os
 
-app = Flask(__name__, static_folder='static', static_url_path='/static')
-server = app.server
+server = Flask(__name__, static_folder='static', static_url_path='/static')
+app = server
 
 @app.route('/')
 def serve_root():
@@ -27,4 +27,4 @@ def health():
     return {'status': 'ok', 'message': 'CDDA Meeting Manager running'}
 
 if __name__ == "__main__":
-    app.run(debug=True, port=8050)
+    server.run(debug=True, port=8050)
