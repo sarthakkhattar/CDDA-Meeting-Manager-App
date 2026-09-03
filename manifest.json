@@ -2,38 +2,40 @@
   "version": 1,
   "locale": "en_US.UTF-8",
   "metadata": {
-    "appmode": "python-dash",
+    "appmode": "python-flask",
     "entrypoint": "app:server"
   },
   "python": {
-    "version": "3.12.3",
+    "version": "3.12.0",
     "package_manager": {
       "name": "pip",
-      "version": "24.0",
       "package_file": "requirements.txt"
     }
   },
   "files": {
     "app.py": {
-      "checksum": "d137bc8d89c2a4e3375d4ec99223947f"
+      "checksum": "c5b53b443f1493f54f44508cb384beb2"
     },
     "config.py": {
-      "checksum": "fecafd1ebf6fcc8c5085bba38994c5a8"
+      "checksum": "883dc77f515d0ede216936923c53d915"
     },
-    "sharepoint_client.py": {
-      "checksum": "edac28f69ee540f9c691232c6dfd4fa5"
+    "fabric_graph.py": {
+      "checksum": "7cd8c68a30411bbc7c1c1dd6709cbfc7"
     },
-    "ad_access.py": {
-      "checksum": "7433135cd21daf8e2b50100bb9d7a0f0"
+    "make_manifest.py": {
+      "checksum": "8888c0633b6fb00a87683139f2e875ed"
     },
-    "theme.py": {
-      "checksum": "2b6730f91631e058bde90069efd14df0"
+    "manifest.json": {
+      "checksum": "b8b2c32f430b008994c709ee8083307b"
+    },
+    "README.md": {
+      "checksum": "f1d6b3c504bc593014daf1d713a54730"
     },
     "requirements.txt": {
-      "checksum": "429473430c713464c6af0e74886d2772"
+      "checksum": "3cdda415fd905061de4442bab007b22e"
     },
-    "gunicorn.conf.py": {
-      "checksum": "1c569be221bc3e706ca3f9e9ce05c519"
+    "static\\index.html": {
+      "checksum": "c9d3bcc438e387b63939cc23a843fd27"
     }
   }
 }
