@@ -2,9 +2,8 @@
   "version": 1,
   "locale": "en_US.UTF-8",
   "metadata": {
-    "appmode": "python-api",
-    "entrypoint": "app:server",
-    "contentType": "application/x-python-web"
+    "appmode": "python-dash",
+    "entrypoint": "app:server"
   },
   "python": {
     "version": "3.12.0",
@@ -15,28 +14,25 @@
   },
   "files": {
     "app.py": {
-      "checksum": "c5b53b443f1493f54f44508cb384beb2"
+      "checksum": "cd5dc7c91887a8a26d6d19c7b23e3790"
     },
     "config.py": {
-      "checksum": "883dc77f515d0ede216936923c53d915"
+      "checksum": "069e03d91ded53ec7b40e3ea7f755bd7"
     },
     "fabric_graph.py": {
-      "checksum": "7cd8c68a30411bbc7c1c1dd6709cbfc7"
+      "checksum": "a4378ed5d8974f359de5ad8238cd0fbc"
     },
     "make_manifest.py": {
-      "checksum": "8888c0633b6fb00a87683139f2e875ed"
+      "checksum": "16203c75578ddaf3db990fdab1f18c83"
     },
     "manifest.json": {
-      "checksum": "b8b2c32f430b008994c709ee8083307b"
+      "checksum": "364b0b8e0f494bf47d582b280a5843cf"
     },
     "README.md": {
       "checksum": "f1d6b3c504bc593014daf1d713a54730"
     },
     "requirements.txt": {
-      "checksum": "3cdda415fd905061de4442bab007b22e"
-    },
-    "static\\index.html": {
-      "checksum": "c9d3bcc438e387b63939cc23a843fd27"
+      "checksum": "8e207b72b7c005f3c6119f18cfc339e2"
     }
   }
 }
