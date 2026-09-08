@@ -20,19 +20,19 @@
       "checksum": "069e03d91ded53ec7b40e3ea7f755bd7"
     },
     "fabric_graph.py": {
-      "checksum": "a4378ed5d8974f359de5ad8238cd0fbc"
+      "checksum": "7b7e31bebefc9d4d55b8bf6fa410eb07"
     },
     "make_manifest.py": {
       "checksum": "16203c75578ddaf3db990fdab1f18c83"
     },
     "manifest.json": {
-      "checksum": "364b0b8e0f494bf47d582b280a5843cf"
+      "checksum": "ccf989d10fe84d400bc0ddef5992dba9"
     },
     "README.md": {
       "checksum": "f1d6b3c504bc593014daf1d713a54730"
     },
     "requirements.txt": {
-      "checksum": "8e207b72b7c005f3c6119f18cfc339e2"
+      "checksum": "da54b5cf11d7163834d3f445492c7ab1"
     }
   }
 }
