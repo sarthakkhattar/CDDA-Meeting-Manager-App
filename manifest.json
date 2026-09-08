@@ -3,7 +3,8 @@
   "locale": "en_US.UTF-8",
   "metadata": {
     "appmode": "python-api",
-    "entrypoint": "app:server"
+    "entrypoint": "app:server",
+    "contentType": "application/x-python-web"
   },
   "python": {
     "version": "3.12.0",
