@@ -2,6 +2,8 @@
 CDDA Meeting Manager - Fabric Lakehouse Backend.
 Flask REST API that manages meeting agendas with data in Fabric.
 
+Force redeploy: 2026-09-08
+
 Endpoints:
   GET  /                    - Serve HTML UI
   GET  /api/health         - Health check
