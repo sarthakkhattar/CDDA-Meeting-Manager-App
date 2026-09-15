@@ -12,115 +12,118 @@ vanilla HTML / CSS / JS that calls Flask API routes for data.
 import json
 import dash
 from dash import html, dcc
-from flask import Blueprint, jsonify, request as flask_request
+from flask import jsonify, request as flask_request, make_response
 
 import config
 from fabric_graph import get_data_layer
 
 # ============================================================================
-# Flask API Blueprint — registered BEFORE Dash to avoid route conflicts
-# ============================================================================
-
-api_bp = Blueprint("api", __name__)
-
-
-@api_bp.route("/api/forums")
-def api_forums():
-    """Return all meeting forums."""
-    try:
-        dl = get_data_layer()
-        meetings = dl.get_meetings()
-        forums = []
-        for m in meetings:
-            items = dl.get_agenda_items(m["id"])
-            forums.append({
-                "id": m.get("id", ""),
-                "title": m.get("title", ""),
-                "desc": m.get("description", ""),
-                "forum": m.get("forum", ""),
-                "duration": m.get("duration", 60),
-                "itemCount": len(items),
-            })
-        return jsonify({"ok": True, "forums": forums})
-    except Exception as exc:
-        print(f"[api] /api/forums error: {exc}", flush=True)
-        return jsonify({"ok": False, "error": str(exc)}), 500
-
-
-@api_bp.route("/api/forums/<forum_id>/items")
-def api_forum_items(forum_id):
-    """Return all agenda items for a forum."""
-    try:
-        dl = get_data_layer()
-        items = dl.get_agenda_items(forum_id)
-        return jsonify({"ok": True, "items": items})
-    except Exception as exc:
-        print(f"[api] /api/forums/{forum_id}/items error: {exc}", flush=True)
-        return jsonify({"ok": False, "error": str(exc)}), 500
-
-
-@api_bp.route("/api/items", methods=["POST"])
-def api_add_item():
-    """Add an agenda item."""
-    try:
-        body = flask_request.get_json(force=True)
-        dl = get_data_layer()
-        item_id = dl.create_agenda_item(
-            meeting_id=body.get("meeting_id", ""),
-            title=body.get("topic", "Untitled"),
-            topic=body.get("desc", ""),
-            duration=int(body.get("duration", 15)),
-            presenter=body.get("presenter", ""),
-        )
-        if item_id:
-            return jsonify({"ok": True, "id": item_id})
-        return jsonify({"ok": False, "error": "Failed to create"}), 500
-    except Exception as exc:
-        print(f"[api] POST /api/items error: {exc}", flush=True)
-        return jsonify({"ok": False, "error": str(exc)}), 500
-
-
-@api_bp.route("/api/items/<item_id>", methods=["DELETE"])
-def api_delete_item(item_id):
-    """Delete an agenda item."""
-    try:
-        dl = get_data_layer()
-        ok = dl.delete_agenda_item(item_id)
-        return jsonify({"ok": ok})
-    except Exception as exc:
-        print(f"[api] DELETE /api/items/{item_id} error: {exc}", flush=True)
-        return jsonify({"ok": False, "error": str(exc)}), 500
-
-
-@api_bp.route("/health")
-def health_check():
-    return (
-        json.dumps({
-            "status": "ok",
-            "app": "CDDA Meeting Manager",
-            "mode": "demo" if config.DEMO_MODE else "live",
-            "environment": config.APP_ENVIRONMENT,
-        }),
-        200,
-        {"Content-Type": "application/json"},
-    )
-
-
-# ============================================================================
-# Dash App — we only need Dash as the WSGI wrapper for Posit Connect
+# Dash App
 # ============================================================================
 
 app = dash.Dash(
     __name__,
     suppress_callback_exceptions=True,
     title="CDDA Meeting Manager",
-    use_pages=False,
-    pages_folder="",
 )
 server = app.server  # Required for Posit Connect entrypoint app:server
 
-# Register API blueprint on the Flask server
-server.register_blueprint(api_bp)
+
+# ============================================================================
+# before_request hook — intercepts /api/* BEFORE Dash can catch them
+# ============================================================================
+
+@server.before_request
+def handle_api():
+    """Route API requests before Dash's catch-all intercepts them."""
+    path = flask_request.path
+    method = flask_request.method
+
+    if not path.startswith("/api/") and path != "/health":
+        return None  # let Dash handle non-API requests
+
+    try:
+        # ── diagnostic ping ──────────────────────────────────
+        if path == "/api/ping":
+            return _json_response({
+                "ok": True,
+                "mode": "demo" if config.DEMO_MODE else "live",
+                "demo_mode_flag": config.DEMO_MODE,
+                "workspace": config.FABRIC_WORKSPACE_ID[:8] + "..." if config.FABRIC_WORKSPACE_ID else "EMPTY",
+                "lakehouse": config.FABRIC_LAKEHOUSE_ID[:8] + "..." if config.FABRIC_LAKEHOUSE_ID else "EMPTY",
+            })
+
+        # ── GET /api/forums ──────────────────────────────────
+        if path == "/api/forums" and method == "GET":
+            dl = get_data_layer()
+            meetings = dl.get_meetings()
+            forums = []
+            for m in meetings:
+                items = dl.get_agenda_items(m.get("id", ""))
+                forums.append({
+                    "id": m.get("id", ""),
+                    "title": m.get("title", ""),
+                    "desc": m.get("description", ""),
+                    "forum": m.get("forum", ""),
+                    "duration": m.get("duration", 60),
+                    "itemCount": len(items),
+                })
+            return _json_response({"ok": True, "forums": forums})
+
+        # ── GET /api/forums/<id>/items ───────────────────────
+        if path.startswith("/api/forums/") and path.endswith("/items") and method == "GET":
+            forum_id = path.split("/")[3]
+            dl = get_data_layer()
+            items = dl.get_agenda_items(forum_id)
+            # convert any non-serializable types
+            clean = []
+            for it in items:
+                clean.append({k: (str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v) for k, v in it.items()})
+            return _json_response({"ok": True, "items": clean})
+
+        # ── POST /api/items ──────────────────────────────────
+        if path == "/api/items" and method == "POST":
+            body = flask_request.get_json(force=True)
+            dl = get_data_layer()
+            item_id = dl.create_agenda_item(
+                meeting_id=body.get("meeting_id", ""),
+                title=body.get("topic", "Untitled"),
+                topic=body.get("desc", ""),
+                duration=int(body.get("duration", 15)),
+                presenter=body.get("presenter", ""),
+            )
+            if item_id:
+                return _json_response({"ok": True, "id": item_id})
+            return _json_response({"ok": False, "error": "Failed to create"}, 500)
+
+        # ── DELETE /api/items/<id> ───────────────────────────
+        if path.startswith("/api/items/") and method == "DELETE":
+            item_id = path.split("/")[-1]
+            dl = get_data_layer()
+            ok = dl.delete_agenda_item(item_id)
+            return _json_response({"ok": ok})
+
+        # ── /health ──────────────────────────────────────────
+        if path == "/health":
+            return _json_response({
+                "status": "ok",
+                "app": "CDDA Meeting Manager",
+                "mode": "demo" if config.DEMO_MODE else "live",
+                "environment": config.APP_ENVIRONMENT,
+            })
+
+    except Exception as exc:
+        print(f"[api] {method} {path} ERROR: {type(exc).__name__}: {exc}", flush=True)
+        return _json_response({"ok": False, "error": str(exc)}, 500)
+
+    return _json_response({"ok": False, "error": "Unknown endpoint"}, 404)
+
+
+def _json_response(data, status=200):
+    """Return a JSON response that Dash cannot intercept."""
+    resp = make_response(json.dumps(data, default=str), status)
+    resp.headers["Content-Type"] = "application/json"
+    return resp
 
 
 # ============================================================================

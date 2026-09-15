@@ -14,7 +14,7 @@
   },
   "files": {
     "app.py": {
-      "checksum": "beaef77515a8415682f491340f83e69a"
+      "checksum": "769745dabfa7f09170fca8c5c51c429f"
     },
     "config.py": {
       "checksum": "069e03d91ded53ec7b40e3ea7f755bd7"
@@ -26,7 +26,7 @@
       "checksum": "16203c75578ddaf3db990fdab1f18c83"
     },
     "manifest.json": {
-      "checksum": "c6655737cfdc1b23e1561a0b11e55ca3"
+      "checksum": "c28388f1c6f8465e9c658595a8505512"
     },
     "README.md": {
       "checksum": "f1d6b3c504bc593014daf1d713a54730"
