@@ -146,12 +146,29 @@ class FabricDataLayer:
             return False
 
     # ==================================================================
+    # Meeting Instances
+    # ==================================================================
+
+    def get_meeting_instances(self, meeting_id: str) -> List[Dict]:
+        """Return date instances for a meeting forum."""
+        if config.DEMO_MODE:
+            return self._demo_meeting_instances(meeting_id)
+        try:
+            from deltalake import DeltaTable
+            dt = DeltaTable(_table_path("meeting_instances"), storage_options=self._opts)
+            rows = dt.to_pyarrow_table().to_pylist()
+            return [r for r in rows if r.get("meeting_id") == meeting_id]
+        except Exception as exc:
+            print(f"[fabric] get_meeting_instances error: {exc}")
+            return []
+
+    # ==================================================================
     # Agenda Items
     # ==================================================================
 
-    def get_agenda_items(self, meeting_id: str) -> List[Dict]:
+    def get_agenda_items(self, meeting_id: str, instance_id: Optional[str] = None) -> List[Dict]:
         if config.DEMO_MODE:
-            return self._demo_agenda_items(meeting_id)
+            return self._demo_agenda_items(meeting_id, instance_id)
         try:
             from deltalake import DeltaTable
             dt = DeltaTable(_table_path("agenda_items"), storage_options=self._opts)
@@ -227,7 +244,7 @@ class FabricDataLayer:
 
     def get_documents(self, item_id: str) -> List[Dict]:
         if config.DEMO_MODE:
-            return []
+            return self._demo_documents(item_id)
         try:
             from deltalake import DeltaTable
             dt = DeltaTable(_table_path("documents"), storage_options=self._opts)
@@ -340,19 +357,103 @@ class FabricDataLayer:
              "created_at": "2024-09-03T14:00:00"},
         ]
 
-    def _demo_agenda_items(self, meeting_id: str) -> List[Dict]:
-        if meeting_id == "mtg_1":
-            return [
-                {"id": "itm_1", "meeting_id": "mtg_1", "title": "Project Updates",
-                 "topic": "Current project status", "duration": 15,
-                 "presenter": "John Smith", "status": "Pending", "item_order": 1,
-                 "created_at": "2024-09-01T09:30:00"},
-                {"id": "itm_2", "meeting_id": "mtg_1", "title": "Q&A Session",
-                 "topic": "Open questions and discussion", "duration": 30,
-                 "presenter": "Team", "status": "Pending", "item_order": 2,
-                 "created_at": "2024-09-01T09:45:00"},
-            ]
-        return []
+    def _demo_meeting_instances(self, meeting_id: str) -> List[Dict]:
+        instances = {
+            "mtg_1": [
+                {"id": "inst_1", "meeting_id": "mtg_1", "date": "2026-01-07",
+                 "display_text": "07 Jan 2026", "is_available": True},
+                {"id": "inst_2", "meeting_id": "mtg_1", "date": "2026-01-14",
+                 "display_text": "14 Jan 2026", "is_available": True},
+                {"id": "inst_3", "meeting_id": "mtg_1", "date": "2026-01-21",
+                 "display_text": "21 Jan 2026", "is_available": True},
+                {"id": "inst_4", "meeting_id": "mtg_1", "date": "2026-01-28",
+                 "display_text": "28 Jan 2026", "is_available": True},
+            ],
+            "mtg_2": [
+                {"id": "inst_5", "meeting_id": "mtg_2", "date": "2026-01-10",
+                 "display_text": "10 Jan 2026", "is_available": True},
+                {"id": "inst_6", "meeting_id": "mtg_2", "date": "2026-01-24",
+                 "display_text": "24 Jan 2026", "is_available": True},
+                {"id": "inst_7", "meeting_id": "mtg_2", "date": "2026-02-07",
+                 "display_text": "07 Feb 2026", "is_available": True},
+            ],
+        }
+        return instances.get(meeting_id, [])
+
+    def _demo_agenda_items(self, meeting_id: str, instance_id: Optional[str] = None) -> List[Dict]:
+        items_by_instance = {
+            "inst_1": [
+                {"id": "itm_1", "meeting_id": "mtg_1", "instance_id": "inst_1",
+                 "title": "Request Intake Walkthrough", "duration": 15,
+                 "presenter": "Jane Smith",
+                 "topic": "Walk through recent request intake process",
+                 "status": "Pending", "item_order": 1,
+                 "created_at": "2026-01-05T09:00:00"},
+                {"id": "itm_2", "meeting_id": "mtg_1", "instance_id": "inst_1",
+                 "title": "Open Q&A: Tooling Refresh", "duration": 30,
+                 "presenter": "John Doe",
+                 "topic": "Discussion on new tooling updates",
+                 "status": "Pending", "item_order": 2,
+                 "created_at": "2026-01-05T09:15:00"},
+            ],
+            "inst_3": [
+                {"id": "itm_3", "meeting_id": "mtg_1", "instance_id": "inst_3",
+                 "title": "Process Improvements", "duration": 20,
+                 "presenter": "Sarah Johnson",
+                 "topic": "Review Q1 process improvements",
+                 "status": "Pending", "item_order": 1,
+                 "created_at": "2026-01-19T10:00:00"},
+            ],
+            "inst_5": [
+                {"id": "itm_4", "meeting_id": "mtg_2", "instance_id": "inst_5",
+                 "title": "Protocol Design Review", "duration": 45,
+                 "presenter": "Dr. Chen",
+                 "topic": "Review new protocol design approach",
+                 "status": "Pending", "item_order": 1,
+                 "created_at": "2026-01-08T14:00:00"},
+                {"id": "itm_5", "meeting_id": "mtg_2", "instance_id": "inst_5",
+                 "title": "Statistical Analysis Plan", "duration": 25,
+                 "presenter": "Maria Garcia",
+                 "topic": "Discussion of updated SAP",
+                 "status": "Pending", "item_order": 2,
+                 "created_at": "2026-01-08T14:30:00"},
+            ],
+            "inst_7": [
+                {"id": "itm_6", "meeting_id": "mtg_2", "instance_id": "inst_7",
+                 "title": "Statistical Interim Analysis", "duration": 30,
+                 "presenter": "Dr. Chen",
+                 "topic": "",
+                 "status": "Pending", "item_order": 1,
+                 "created_at": "2026-02-05T14:00:00"},
+            ],
+        }
+
+        if instance_id is not None:
+            return items_by_instance.get(instance_id, [])
+
+        # Backward compatibility: no instance_id means return all items
+        # for the given meeting_id.
+        all_items: List[Dict] = []
+        for items in items_by_instance.values():
+            for item in items:
+                if item["meeting_id"] == meeting_id:
+                    all_items.append(item)
+        return all_items
+
+    def _demo_documents(self, item_id: str) -> List[Dict]:
+        docs = {
+            "itm_1": [
+                {"id": "doc_1", "item_id": "itm_1",
+                 "filename": "Site-Country MS Order.xlsx", "doc_type": "xlsx"},
+                {"id": "doc_2", "item_id": "itm_1",
+                 "filename": "Example recruitment projections.xlsx", "doc_type": "xlsx"},
+            ],
+            "itm_4": [
+                {"id": "doc_3", "item_id": "itm_4",
+                 "filename": "Protocol_v2_draft.pdf", "doc_type": "pdf"},
+            ],
+        }
+        return docs.get(item_id, [])
 
 
 # ============================================================================

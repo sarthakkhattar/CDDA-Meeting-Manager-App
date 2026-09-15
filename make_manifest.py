@@ -12,7 +12,7 @@ def md5_file(filepath):
     return md5.hexdigest()
 
 EXCLUDE_DIRS = {'.env', '.env.local', '__pycache__', '.git', '.gitignore',
-                '.DS_Store', 'venv', '.venv', 'static'}
+                '.DS_Store', 'venv', '.venv', 'static', '.claude'}
 EXCLUDE_FILES = {'.env', '.env.local', '.DS_Store', '.gitignore'}
 
 files = {}
