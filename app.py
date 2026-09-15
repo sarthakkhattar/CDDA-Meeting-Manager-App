@@ -6,11 +6,13 @@ Entrypoint: app:server
 
 The UI is a self-contained SPA embedded via app.index_string.
 Dash is used only as the WSGI host; the entire front-end is
-vanilla HTML / CSS / JS matching the provided CDDA design spec.
+vanilla HTML / CSS / JS that calls Flask API routes for data.
 """
 
+import json
 import dash
 from dash import html, dcc
+from flask import jsonify, request as flask_request
 
 import config
 from fabric_graph import get_data_layer
@@ -25,6 +27,94 @@ app = dash.Dash(
     title="CDDA Meeting Manager",
 )
 server = app.server  # Required for Posit Connect entrypoint app:server
+
+
+# ============================================================================
+# Flask API routes — read/write Fabric Lakehouse
+# ============================================================================
+
+@server.route("/api/forums")
+def api_forums():
+    """Return all meeting forums."""
+    try:
+        dl = get_data_layer()
+        meetings = dl.get_meetings()
+        # Group agenda items by meeting to get counts
+        forums = []
+        for m in meetings:
+            items = dl.get_agenda_items(m["id"])
+            forums.append({
+                "id": m.get("id", ""),
+                "title": m.get("title", ""),
+                "desc": m.get("description", ""),
+                "forum": m.get("forum", ""),
+                "duration": m.get("duration", 60),
+                "itemCount": len(items),
+            })
+        return jsonify({"ok": True, "forums": forums})
+    except Exception as exc:
+        print(f"[api] /api/forums error: {exc}", flush=True)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@server.route("/api/forums/<forum_id>/items")
+def api_forum_items(forum_id):
+    """Return all agenda items for a forum."""
+    try:
+        dl = get_data_layer()
+        items = dl.get_agenda_items(forum_id)
+        return jsonify({"ok": True, "items": items})
+    except Exception as exc:
+        print(f"[api] /api/forums/{forum_id}/items error: {exc}", flush=True)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@server.route("/api/items", methods=["POST"])
+def api_add_item():
+    """Add an agenda item."""
+    try:
+        body = flask_request.get_json(force=True)
+        dl = get_data_layer()
+        item_id = dl.create_agenda_item(
+            meeting_id=body.get("meeting_id", ""),
+            title=body.get("topic", "Untitled"),
+            topic=body.get("desc", ""),
+            duration=int(body.get("duration", 15)),
+            presenter=body.get("presenter", ""),
+        )
+        if item_id:
+            return jsonify({"ok": True, "id": item_id})
+        return jsonify({"ok": False, "error": "Failed to create"}), 500
+    except Exception as exc:
+        print(f"[api] POST /api/items error: {exc}", flush=True)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@server.route("/api/items/<item_id>", methods=["DELETE"])
+def api_delete_item(item_id):
+    """Delete an agenda item."""
+    try:
+        dl = get_data_layer()
+        ok = dl.delete_agenda_item(item_id)
+        return jsonify({"ok": ok})
+    except Exception as exc:
+        print(f"[api] DELETE /api/items/{item_id} error: {exc}", flush=True)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@server.route("/health")
+def health_check():
+    return (
+        json.dumps({
+            "status": "ok",
+            "app": "CDDA Meeting Manager",
+            "mode": "demo" if config.DEMO_MODE else "live",
+            "environment": config.APP_ENVIRONMENT,
+        }),
+        200,
+        {"Content-Type": "application/json"},
+    )
+
 
 # ============================================================================
 # Complete SPA embedded as Dash index_string
@@ -115,6 +205,9 @@ app.index_string = r'''<!DOCTYPE html>
         .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
         .fact{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 
+        /* ── Loading ────────────────────────────────────────────── */
+        .loading{text-align:center;padding:40px;color:#8a95a6}
+
         /* ── Responsive ─────────────────────────────────────────── */
         @media(max-width:900px){
             .ag{flex-direction:column;height:auto}
@@ -137,7 +230,9 @@ app.index_string = r'''<!DOCTYPE html>
 
     <!-- ═══ Home screen ═══ -->
     <div id="scrHome" class="scr on">
-        <div class="home-grid" id="forumGrid"></div>
+        <div class="home-grid" id="forumGrid">
+            <div class="loading">Loading forums...</div>
+        </div>
     </div>
 
     <!-- ═══ Agenda screen ═══ -->
@@ -200,64 +295,69 @@ app.index_string = r'''<!DOCTYPE html>
 
 <script>
 // ======================================================================
-// CDDA Meeting Manager — client-side state & rendering
+// CDDA Meeting Manager — fetches data from Flask API → Fabric Lakehouse
 // ======================================================================
 const MM = (() => {
     const CAP = 60;   // minutes per meeting
 
-    // ── Demo data ────────────────────────────────────────────
-    const data = {
-        ooh: {
-            title: 'CDDA Open Office Hours',
-            desc:  'Standing forum for open discussion and Q&A',
-            meetings: [
-                { id:'ooh-1', date:'07 Jan 2026', items:[
-                    { id:'a1', duration:15, topic:'Request intake walkthrough',       presenter:'Jane Smith',    desc:'Walk through recent request intake process' },
-                    { id:'a2', duration:30, topic:'Open Q&A: tooling refresh',        presenter:'John Doe',      desc:'Discussion on new tooling updates' }
-                ]},
-                { id:'ooh-2', date:'14 Jan 2026', items:[] },
-                { id:'ooh-3', date:'21 Jan 2026', items:[
-                    { id:'a3', duration:20, topic:'Process improvements',             presenter:'Sarah Johnson', desc:'Review Q1 process improvements' }
-                ]},
-                { id:'ooh-4', date:'28 Jan 2026', items:[] }
-            ]
-        },
-        cdsr: {
-            title: 'Clinical Design & Statistics Review',
-            desc:  'Regular design and statistics review forum',
-            meetings: [
-                { id:'cdsr-1', date:'10 Jan 2026', items:[
-                    { id:'b1', duration:45, topic:'Protocol design review',           presenter:'Dr. Chen',      desc:'Review new protocol design approach' },
-                    { id:'b2', duration:25, topic:'Statistical analysis plan',        presenter:'Maria Garcia',  desc:'Discussion of updated SAP' }
-                ]},
-                { id:'cdsr-2', date:'24 Jan 2026', items:[] },
-                { id:'cdsr-3', date:'07 Feb 2026', items:[
-                    { id:'b3', duration:30, topic:'Statistical interim analysis',     presenter:'Dr. Chen',      desc:'' }
-                ]}
-            ]
-        }
-    };
+    let forums  = [];  // loaded from API
+    let items   = [];  // agenda items for current forum
+    let curForum = null;
 
-    let curForum   = null;
-    let curMeeting = null;
+    // ── API helpers ─────────────────────────────────────────
+    const BASE = window.location.pathname.replace(/\/$/, '');
+    function api(path, opts) {
+        return fetch(BASE + path, opts).then(r => r.json());
+    }
+
+    // ── Load forums from Lakehouse ──────────────────────────
+    async function loadForums() {
+        try {
+            const res = await api('/api/forums');
+            if (res.ok) {
+                forums = res.forums;
+            } else {
+                console.error('API error:', res.error);
+                forums = [];
+            }
+        } catch (e) {
+            console.error('Fetch error:', e);
+            forums = [];
+        }
+        renderHome();
+    }
+
+    // ── Load agenda items for a forum ───────────────────────
+    async function loadItems(forumId) {
+        try {
+            const res = await api('/api/forums/' + forumId + '/items');
+            if (res.ok) {
+                items = res.items;
+            } else {
+                console.error('API error:', res.error);
+                items = [];
+            }
+        } catch (e) {
+            console.error('Fetch error:', e);
+            items = [];
+        }
+    }
 
     // ── Navigation ───────────────────────────────────────────
     function goHome() {
-        curForum = curMeeting = null;
+        curForum = null;
+        items = [];
         el('scrHome').classList.add('on');
         el('scrAgenda').classList.remove('on');
-        renderHome();
+        loadForums();
     }
-    function openForum(fid) {
-        curForum = fid;
-        curMeeting = data[fid].meetings[0].id;
+
+    async function openForum(fid) {
+        curForum = forums.find(f => f.id === fid);
+        if (!curForum) return;
         el('scrHome').classList.remove('on');
         el('scrAgenda').classList.add('on');
-        renderSidebar();
-        renderMain();
-    }
-    function selectMeeting(mid) {
-        curMeeting = mid;
+        await loadItems(fid);
         renderSidebar();
         renderMain();
     }
@@ -266,44 +366,38 @@ const MM = (() => {
     function renderHome() {
         const g = el('forumGrid');
         g.innerHTML = '';
-        for (const [fid, f] of Object.entries(data)) {
+        if (!forums.length) {
+            g.innerHTML = '<div class="empty">No forums found. Check Lakehouse connection.</div>';
+            return;
+        }
+        for (const f of forums) {
             const c = document.createElement('div');
             c.className = 'forum-card';
-            c.onclick = () => openForum(fid);
+            c.onclick = () => openForum(f.id);
             c.innerHTML =
                 '<h2>' + esc(f.title) + '</h2>' +
                 '<p>'  + esc(f.desc)  + '</p>' +
-                '<span class="forum-badge">' + f.meetings.length + ' meetings</span>';
+                '<span class="forum-badge">' + f.itemCount + ' item' + (f.itemCount !== 1 ? 's' : '') + '</span>';
             g.appendChild(c);
         }
     }
 
     // ── Render: sidebar ──────────────────────────────────────
     function renderSidebar() {
-        const f = data[curForum];
-        el('sbTitle').textContent = f.title;
+        el('sbTitle').textContent = curForum ? curForum.title : '';
         const list = el('sbList');
-        list.innerHTML = '';
-        for (const m of f.meetings) {
-            const d = document.createElement('div');
-            d.className = 'sb-item' + (m.id === curMeeting ? ' on' : '');
-            d.onclick = () => selectMeeting(m.id);
-            d.innerHTML =
-                '<div class="sb-date">' + esc(m.date) + '</div>' +
-                '<div class="sb-cnt">'  + m.items.length + ' item' + (m.items.length !== 1 ? 's' : '') + '</div>';
-            list.appendChild(d);
-        }
+        list.innerHTML = '<div style="padding:12px;color:#8a95a6;font-size:13px">All agenda items shown below</div>';
     }
 
     // ── Render: main panel ───────────────────────────────────
     function renderMain() {
-        const m = data[curForum].meetings.find(x => x.id === curMeeting);
-        el('mnDate').textContent = m.date;
+        const cap = curForum ? curForum.duration : CAP;
+        el('mnDate').textContent = curForum ? curForum.title : '';
 
         // time budget
-        const used = m.items.reduce((s, i) => s + i.duration, 0);
-        const pct  = Math.min(Math.round(used / CAP * 100), 100);
-        el('tbText').textContent = used + ' / ' + CAP + ' minutes';
+        const used = items.reduce((s, i) => s + (i.duration || 0), 0);
+        const pct  = cap > 0 ? Math.min(Math.round(used / cap * 100), 100) : 0;
+        el('tbText').textContent = used + ' / ' + cap + ' minutes';
         const fill = el('tbFill');
         fill.style.width = pct + '%';
         fill.style.background = pct > 90 ? '#e4202d' : pct > 75 ? '#f0ad4e' : '#1e4ebc';
@@ -311,19 +405,19 @@ const MM = (() => {
         // items
         const box = el('agItems');
         box.innerHTML = '';
-        if (!m.items.length) {
+        if (!items.length) {
             box.innerHTML = '<div class="empty">No agenda items yet. Click "+ Add Item" to get started.</div>';
             return;
         }
-        for (const it of m.items) {
+        for (const it of items) {
             const row = document.createElement('div');
             row.className = 'ag-item';
             row.innerHTML =
                 '<div style="flex:1">' +
-                    '<div class="it-topic">' + esc(it.topic) + '</div>' +
+                    '<div class="it-topic">' + esc(it.title || it.topic || '') + '</div>' +
                     (it.presenter ? '<div class="it-pres">Presenter: ' + esc(it.presenter) + '</div>' : '') +
-                    (it.desc      ? '<div class="it-desc">' + esc(it.desc) + '</div>' : '') +
-                    '<span class="it-dur">' + it.duration + ' min</span>' +
+                    (it.topic     ? '<div class="it-desc">' + esc(it.topic) + '</div>' : '') +
+                    '<span class="it-dur">' + (it.duration || 0) + ' min</span>' +
                 '</div>' +
                 '<button class="btn btn-d" data-rm="' + it.id + '">Remove</button>';
             box.appendChild(row);
@@ -338,34 +432,59 @@ const MM = (() => {
         if (!el('addForm').classList.contains('hid')) el('fTopic').focus();
     }
 
-    function addItem() {
+    async function addItem() {
         const topic = el('fTopic').value.trim();
         if (!topic) { alert('Please enter a topic'); return; }
         const dur  = parseInt(el('fDur').value, 10);
         const pres = el('fPres').value.trim();
         const desc = el('fDesc').value.trim();
-        const m = data[curForum].meetings.find(x => x.id === curMeeting);
-        m.items.push({ id:'i' + Date.now(), duration:dur, topic:topic, presenter:pres, desc:desc });
+
+        try {
+            const res = await api('/api/items', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    meeting_id: curForum.id,
+                    topic: topic,
+                    duration: dur,
+                    presenter: pres,
+                    desc: desc
+                })
+            });
+            if (!res.ok) { alert('Error: ' + (res.error || 'Failed to add')); return; }
+        } catch (e) {
+            alert('Network error: ' + e.message);
+            return;
+        }
+
+        // clear form and reload
         el('fTopic').value = ''; el('fDur').value = '15'; el('fPres').value = ''; el('fDesc').value = '';
         toggleForm();
+        await loadItems(curForum.id);
         renderSidebar();
         renderMain();
     }
 
-    function removeItem(iid) {
-        const m = data[curForum].meetings.find(x => x.id === curMeeting);
-        const idx = m.items.findIndex(i => i.id === iid);
-        if (idx >= 0) { m.items.splice(idx, 1); renderSidebar(); renderMain(); }
+    async function removeItem(iid) {
+        if (!confirm('Remove this item?')) return;
+        try {
+            await api('/api/items/' + iid, { method: 'DELETE' });
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+        await loadItems(curForum.id);
+        renderSidebar();
+        renderMain();
     }
 
     // ── Helpers ──────────────────────────────────────────────
     function el(id) { return document.getElementById(id); }
-    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
     // ── Boot ─────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', renderHome);
+    document.addEventListener('DOMContentLoaded', loadForums);
 
-    return { goHome, openForum, selectMeeting, toggleForm, addItem, removeItem };
+    return { goHome, openForum, toggleForm, addItem, removeItem };
 })();
 </script>
 </body>
@@ -374,25 +493,6 @@ const MM = (() => {
 
 # Minimal Dash layout — required by Dash internals but not visible
 app.layout = html.Div(id="hidden-dash-root", style={"display": "none"})
-
-
-# ============================================================================
-# Health route
-# ============================================================================
-
-@server.route("/health")
-def health_check():
-    import json
-    return (
-        json.dumps({
-            "status": "ok",
-            "app": "CDDA Meeting Manager",
-            "mode": "demo" if config.DEMO_MODE else "live",
-            "environment": config.APP_ENVIRONMENT,
-        }),
-        200,
-        {"Content-Type": "application/json"},
-    )
 
 
 # ============================================================================

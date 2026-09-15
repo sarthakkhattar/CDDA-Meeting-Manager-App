@@ -14,19 +14,19 @@
   },
   "files": {
     "app.py": {
-      "checksum": "116879f539258e16c42273562619a4d9"
+      "checksum": "0cc2f4d35baadb44288330866d2b8448"
     },
     "config.py": {
       "checksum": "069e03d91ded53ec7b40e3ea7f755bd7"
     },
     "fabric_graph.py": {
-      "checksum": "f32306956a022b4d0db1d44fdf8974af"
+      "checksum": "fd4afe214cc8e038291f6d716083053c"
     },
     "make_manifest.py": {
       "checksum": "16203c75578ddaf3db990fdab1f18c83"
     },
     "manifest.json": {
-      "checksum": "1880611f3c57eacf370e088911a90183"
+      "checksum": "77e00ee8f8b340db0b5c04bbec03efaf"
     },
     "README.md": {
       "checksum": "f1d6b3c504bc593014daf1d713a54730"
