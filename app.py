@@ -3,18 +3,20 @@ CDDA Meeting Manager — Dash Application.
 Deployed on Posit Connect as python-dash.
 
 Entrypoint: app:server
+
+The UI is a self-contained SPA embedded via app.index_string.
+Dash is used only as the WSGI host; the entire front-end is
+vanilla HTML / CSS / JS matching the provided CDDA design spec.
 """
 
 import dash
-from dash import html, dcc, Input, Output, State, no_update, ALL
-from dash.exceptions import PreventUpdate
-import json
+from dash import html, dcc
 
 import config
 from fabric_graph import get_data_layer
 
 # ============================================================================
-# Dash App
+# Dash App — we only need Dash as the WSGI wrapper for Posit Connect
 # ============================================================================
 
 app = dash.Dash(
@@ -25,578 +27,369 @@ app = dash.Dash(
 server = app.server  # Required for Posit Connect entrypoint app:server
 
 # ============================================================================
-# Style tokens
+# Complete SPA embedded as Dash index_string
 # ============================================================================
 
-HEADER = {
-    "background": "linear-gradient(135deg, #0B1D3A, #1E4EBC)",
-    "color": "white",
-    "padding": "24px 32px",
-}
+app.index_string = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDDA Meeting Manager</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{
+            font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+            background:#f2f4f7;color:#3a4658;
+        }
 
-CONTAINER = {
-    "maxWidth": "1200px",
-    "margin": "24px auto",
-    "padding": "0 24px",
-}
+        /* ── Header ─────────────────────────────────────────────── */
+        .hdr{background:#0b1d3a;color:#fff;display:flex;align-items:center;height:56px;border-bottom:3px solid #e4202d;padding:0 24px}
+        .hdr-logo{font-weight:700;font-size:20px;letter-spacing:.5px}
+        .hdr-sep{width:1px;height:28px;background:rgba(255,255,255,.25);margin:0 16px}
+        .hdr-title{font-size:15px;font-weight:400;opacity:.9}
 
-CARD = {
-    "background": "white",
-    "borderRadius": "8px",
-    "padding": "20px",
-    "marginBottom": "16px",
-    "boxShadow": "0 1px 3px rgba(0,0,0,0.1)",
-    "border": "1px solid #e0e0e0",
-}
+        /* ── Container ──────────────────────────────────────────── */
+        .wrap{max-width:1400px;margin:0 auto;padding:24px}
 
-STATUS_BAR = {
-    **CARD,
-    "borderLeft": "4px solid #0B1D3A",
-    "marginBottom": "24px",
-}
+        /* ── Screens ────────────────────────────────────────────── */
+        .scr{display:none}.scr.on{display:block}
 
-BTN = {
-    "background": "#0B1D3A",
-    "color": "white",
-    "border": "none",
-    "borderRadius": "6px",
-    "padding": "10px 20px",
-    "cursor": "pointer",
-    "fontSize": "14px",
-    "marginRight": "8px",
-}
+        /* ── Home ───────────────────────────────────────────────── */
+        .home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+        .forum-card{background:#fff;border-radius:8px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.1);cursor:pointer;transition:.2s;border-left:4px solid #1e4ebc}
+        .forum-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.13);transform:translateY(-2px)}
+        .forum-card h2{font-size:18px;font-weight:700;color:#0b1d3a;margin-bottom:8px}
+        .forum-card p{font-size:14px;color:#6b7789;margin-bottom:16px}
+        .forum-badge{font-size:22px;font-weight:700;color:#1e4ebc;background:#e8eefb;display:inline-block;padding:6px 14px;border-radius:4px}
 
-BTN_BACK = {**BTN, "background": "#6c757d"}
-BTN_OK = {**BTN, "background": "#198754"}
-BTN_DEL = {**BTN, "background": "#dc3545"}
+        /* ── Agenda layout ──────────────────────────────────────── */
+        .ag{display:flex;gap:20px;height:calc(100vh - 112px)}
 
-INPUT = {
-    "width": "100%",
-    "padding": "10px",
-    "border": "1px solid #ccc",
-    "borderRadius": "6px",
-    "marginBottom": "12px",
-    "fontSize": "14px",
-}
+        /* sidebar */
+        .sb{width:260px;min-width:260px;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.1);display:flex;flex-direction:column;overflow:hidden}
+        .sb-back{padding:10px 16px;display:flex;align-items:center;gap:6px;cursor:pointer;color:#1e4ebc;font-size:13px;background:#f2f4f7;border:none;width:100%;text-align:left;font-family:inherit}
+        .sb-back:hover{background:#e9ecf1}
+        .sb-hdr{padding:12px 16px;border-bottom:1px solid #e4e8ef;font-weight:700;font-size:14px;color:#0b1d3a}
+        .sb-list{flex:1;overflow-y:auto;padding:6px 8px}
+        .sb-item{padding:10px 12px;margin:3px 0;border-radius:4px;cursor:pointer;border-left:3px solid transparent;background:#f9fafb;transition:.15s}
+        .sb-item:hover{background:#edf0f4}
+        .sb-item.on{background:#e8eefb;border-left-color:#1e4ebc}
+        .sb-date{font-size:13px;font-weight:600;color:#0b1d3a}
+        .sb-cnt{font-size:12px;color:#8a95a6;margin-top:2px}
 
-# ============================================================================
-# Layout
-# ============================================================================
+        /* main panel */
+        .mn{flex:1;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.1);display:flex;flex-direction:column;overflow:hidden}
+        .mn-hdr{padding:20px 24px;border-bottom:1px solid #e4e8ef;display:flex;justify-content:space-between;align-items:center}
+        .mn-hdr h1{font-size:22px;font-weight:700;color:#0b1d3a}
+        .mn-body{flex:1;overflow-y:auto;padding:20px 24px}
 
-app.layout = html.Div(
-    style={
-        "fontFamily": '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        "background": "#f5f5f5",
-        "minHeight": "100vh",
-    },
-    children=[
-        # ---- data stores ---------------------------------------------------
-        dcc.Store(id="meetings-data", data=[]),
-        dcc.Store(id="selected-meeting", data=None),
-        dcc.Store(id="agenda-data", data=[]),
-        dcc.Store(id="refresh-trigger", data=0),
-        dcc.Interval(id="init-interval", interval=500, max_intervals=1),
+        /* ── Buttons ────────────────────────────────────────────── */
+        .btn{padding:8px 16px;border-radius:4px;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;transition:.15s}
+        .btn-p{background:#1e4ebc;color:#fff}.btn-p:hover{background:#163d99}
+        .btn-s{background:#e9ecf1;color:#0b1d3a;border:1px solid #d0d5df}.btn-s:hover{background:#d8dce4}
+        .btn-d{background:#fbe8e8;color:#c4141f;font-size:12px;padding:5px 10px;border-radius:3px}.btn-d:hover{background:#f2d0d0}
 
-        # ---- header --------------------------------------------------------
-        html.Div(
-            style=HEADER,
-            children=[
-                html.H1(
-                    "CDDA Meeting Manager",
-                    style={"margin": "0", "fontSize": "28px", "fontWeight": "700"},
-                ),
-                html.P(
-                    "Powered by Microsoft Fabric Lakehouse",
-                    style={"margin": "4px 0 0", "opacity": "0.8", "fontSize": "14px"},
-                ),
-            ],
-        ),
+        /* ── Time budget ────────────────────────────────────────── */
+        .tb{margin-bottom:20px;padding:14px 16px;background:#f9fafb;border-radius:6px}
+        .tb-row{display:flex;justify-content:space-between;font-size:13px;color:#6b7789;margin-bottom:6px;font-weight:600}
+        .tb-bar{width:100%;height:8px;background:#e4e8ef;border-radius:4px;overflow:hidden}
+        .tb-fill{height:100%;border-radius:4px;transition:width .3s}
 
-        # ---- body ----------------------------------------------------------
-        html.Div(
-            style=CONTAINER,
-            children=[
-                # status
-                html.Div(
-                    id="status-bar",
-                    style=STATUS_BAR,
-                    children=html.Span("⏳ Loading…", style={"color": "#666"}),
-                ),
+        /* ── Agenda items ───────────────────────────────────────── */
+        .items{display:flex;flex-direction:column;gap:10px}
+        .ag-item{background:#f9fafb;border:1px solid #e4e8ef;border-radius:6px;padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start}
+        .it-topic{font-weight:700;color:#0b1d3a;font-size:14px;margin-bottom:3px}
+        .it-pres{font-size:13px;color:#6b7789;margin-bottom:3px}
+        .it-desc{font-size:13px;color:#3a4658;line-height:1.4;margin-bottom:6px}
+        .it-dur{background:#e8eefb;color:#1e4ebc;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:500;display:inline-block}
+        .empty{text-align:center;padding:40px 24px;color:#8a95a6}
 
-                # ── meetings list view ──────────────────────────────────────
-                html.Div(
-                    id="meetings-view",
-                    children=[
-                        html.H2(
-                            "Meeting Forums",
-                            style={"marginBottom": "16px", "color": "#0B1D3A"},
-                        ),
-                        html.Div(
-                            id="meetings-container",
-                            children=html.P(
-                                "Loading meetings…", style={"color": "#666"}
-                            ),
-                        ),
-                    ],
-                ),
+        /* ── Add form ───────────────────────────────────────────── */
+        .add-form{background:#f9fafb;border:1px dashed #1e4ebc;border-radius:6px;padding:16px;margin-top:14px}
+        .add-form.hid{display:none}
+        .fg{margin-bottom:10px}
+        .fg label{display:block;font-size:13px;font-weight:600;color:#3a4658;margin-bottom:3px}
+        .fg input,.fg select,.fg textarea{width:100%;padding:8px 10px;border:1px solid #d0d5df;border-radius:4px;font-family:inherit;font-size:13px;color:#3a4658}
+        .fg textarea{resize:vertical;min-height:56px}
+        .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .fact{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 
-                # ── agenda detail view (hidden initially) ───────────────────
-                html.Div(
-                    id="agenda-view",
-                    style={"display": "none"},
-                    children=[
-                        html.Button(
-                            "← Back to Meetings", id="back-btn", style=BTN_BACK
-                        ),
-                        html.Div(
-                            style={"marginTop": "16px"},
-                            children=[
-                                html.H2(
-                                    id="agenda-title",
-                                    style={"color": "#0B1D3A", "marginBottom": "4px"},
-                                ),
-                                html.P(
-                                    id="agenda-desc",
-                                    style={"color": "#666", "marginBottom": "8px"},
-                                ),
-                                html.Div(id="time-bar", style={"marginBottom": "24px"}),
-                            ],
-                        ),
-                        html.Div(id="agenda-items"),
+        /* ── Responsive ─────────────────────────────────────────── */
+        @media(max-width:900px){
+            .ag{flex-direction:column;height:auto}
+            .sb{width:100%;min-width:0;max-height:260px}
+            .mn{min-height:420px}
+            .frow{grid-template-columns:1fr}
+        }
+    </style>
+</head>
+<body>
 
-                        # add-item form
-                        html.Div(
-                            style={**CARD, "marginTop": "24px", "cursor": "default"},
-                            children=[
-                                html.H3(
-                                    "Add Agenda Item",
-                                    style={
-                                        "marginBottom": "12px",
-                                        "color": "#0B1D3A",
-                                    },
-                                ),
-                                dcc.Input(
-                                    id="inp-title",
-                                    placeholder="Title *",
-                                    style=INPUT,
-                                ),
-                                dcc.Input(
-                                    id="inp-topic",
-                                    placeholder="Topic Description",
-                                    style=INPUT,
-                                ),
-                                html.Div(
-                                    [
-                                        html.Label(
-                                            "Duration (minutes)",
-                                            style={
-                                                "display": "block",
-                                                "marginBottom": "4px",
-                                                "fontSize": "14px",
-                                                "color": "#666",
-                                            },
-                                        ),
-                                        dcc.Dropdown(
-                                            id="inp-duration",
-                                            options=[
-                                                {"label": f"{t} min", "value": t}
-                                                for t in config.TIME_SLOTS
-                                            ],
-                                            value=15,
-                                            clearable=False,
-                                            style={"marginBottom": "12px"},
-                                        ),
-                                    ]
-                                ),
-                                dcc.Input(
-                                    id="inp-presenter",
-                                    placeholder="Presenter",
-                                    style=INPUT,
-                                ),
-                                html.Button("Add Item", id="add-btn", style=BTN),
-                                html.Div(
-                                    id="add-feedback", style={"marginTop": "8px"}
-                                ),
-                            ],
-                        ),
-                    ],
-                ),
-            ],
-        ),
+<!-- Header -->
+<div class="hdr">
+    <span class="hdr-logo">Lilly</span>
+    <span class="hdr-sep"></span>
+    <span class="hdr-title">CDDA Meeting Manager</span>
+</div>
 
-        # ---- footer --------------------------------------------------------
-        html.Div(
-            html.P(
-                f"CDDA Meeting Manager  |  {config.APP_ENVIRONMENT}",
-                style={
-                    "textAlign": "center",
-                    "color": "#999",
-                    "fontSize": "12px",
-                    "padding": "16px",
-                },
-            )
-        ),
-    ],
-)
+<div class="wrap">
 
-# ============================================================================
-# Callbacks
-# ============================================================================
+    <!-- ═══ Home screen ═══ -->
+    <div id="scrHome" class="scr on">
+        <div class="home-grid" id="forumGrid"></div>
+    </div>
 
+    <!-- ═══ Agenda screen ═══ -->
+    <div id="scrAgenda" class="scr">
+        <div class="ag">
 
-@app.callback(
-    [Output("meetings-data", "data"), Output("status-bar", "children")],
-    [Input("init-interval", "n_intervals"), Input("refresh-trigger", "data")],
-)
-def load_meetings(_n, _r):
-    """Fetch meetings from Fabric (or demo data)."""
-    try:
-        dl = get_data_layer()
-        meetings = dl.get_meetings()
-        mode = "Demo Mode" if config.DEMO_MODE else "Live"
-        status = html.Span(
-            [
-                html.Span("✓ ", style={"color": "#198754"}),
-                f"Connected — {len(meetings)} forum(s) loaded ({mode})",
+            <!-- sidebar -->
+            <div class="sb">
+                <button class="sb-back" onclick="MM.goHome()">&#8592; Back to Forums</button>
+                <div class="sb-hdr" id="sbTitle"></div>
+                <div class="sb-list" id="sbList"></div>
+            </div>
+
+            <!-- main -->
+            <div class="mn">
+                <div class="mn-hdr">
+                    <h1 id="mnDate"></h1>
+                    <button class="btn btn-p" onclick="MM.toggleForm()">+ Add Item</button>
+                </div>
+                <div class="mn-body">
+                    <div class="tb" id="timeBudget">
+                        <div class="tb-row"><span>Time Budget</span><span id="tbText"></span></div>
+                        <div class="tb-bar"><div class="tb-fill" id="tbFill"></div></div>
+                    </div>
+                    <div class="items" id="agItems"></div>
+
+                    <!-- add-item form -->
+                    <div class="add-form hid" id="addForm">
+                        <div class="fg"><label>Topic</label><input id="fTopic" placeholder="Enter topic name"></div>
+                        <div class="frow">
+                            <div class="fg"><label>Duration (minutes)</label>
+                                <select id="fDur">
+                                    <option value="5">5 minutes</option>
+                                    <option value="10">10 minutes</option>
+                                    <option value="15" selected>15 minutes</option>
+                                    <option value="20">20 minutes</option>
+                                    <option value="30">30 minutes</option>
+                                    <option value="45">45 minutes</option>
+                                    <option value="60">60 minutes</option>
+                                </select>
+                            </div>
+                            <div class="fg"><label>Presenter</label><input id="fPres" placeholder="Presenter name"></div>
+                        </div>
+                        <div class="fg"><label>Description</label><textarea id="fDesc" placeholder="Optional description"></textarea></div>
+                        <div class="fact">
+                            <button class="btn btn-s" onclick="MM.toggleForm()">Cancel</button>
+                            <button class="btn btn-p" onclick="MM.addItem()">Add to Agenda</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Dash renderer placeholder (required by Dash but invisible) -->
+<div id="_dash-app-content" style="display:none">{%app_entry%}</div>
+<footer style="display:none">{%config%}{%scripts%}{%renderer%}</footer>
+
+<script>
+// ======================================================================
+// CDDA Meeting Manager — client-side state & rendering
+// ======================================================================
+const MM = (() => {
+    const CAP = 60;   // minutes per meeting
+
+    // ── Demo data ────────────────────────────────────────────
+    const data = {
+        ooh: {
+            title: 'CDDA Open Office Hours',
+            desc:  'Standing forum for open discussion and Q&A',
+            meetings: [
+                { id:'ooh-1', date:'07 Jan 2026', items:[
+                    { id:'a1', duration:15, topic:'Request intake walkthrough',       presenter:'Jane Smith',    desc:'Walk through recent request intake process' },
+                    { id:'a2', duration:30, topic:'Open Q&A: tooling refresh',        presenter:'John Doe',      desc:'Discussion on new tooling updates' }
+                ]},
+                { id:'ooh-2', date:'14 Jan 2026', items:[] },
+                { id:'ooh-3', date:'21 Jan 2026', items:[
+                    { id:'a3', duration:20, topic:'Process improvements',             presenter:'Sarah Johnson', desc:'Review Q1 process improvements' }
+                ]},
+                { id:'ooh-4', date:'28 Jan 2026', items:[] }
             ]
-        )
-        return meetings, status
-    except Exception as exc:
-        status = html.Span(
-            [html.Span("✗ ", style={"color": "#dc3545"}), f"Error: {exc}"]
-        )
-        return [], status
+        },
+        cdsr: {
+            title: 'Clinical Design & Statistics Review',
+            desc:  'Regular design and statistics review forum',
+            meetings: [
+                { id:'cdsr-1', date:'10 Jan 2026', items:[
+                    { id:'b1', duration:45, topic:'Protocol design review',           presenter:'Dr. Chen',      desc:'Review new protocol design approach' },
+                    { id:'b2', duration:25, topic:'Statistical analysis plan',        presenter:'Maria Garcia',  desc:'Discussion of updated SAP' }
+                ]},
+                { id:'cdsr-2', date:'24 Jan 2026', items:[] },
+                { id:'cdsr-3', date:'07 Feb 2026', items:[
+                    { id:'b3', duration:30, topic:'Statistical interim analysis',     presenter:'Dr. Chen',      desc:'' }
+                ]}
+            ]
+        }
+    };
 
+    let curForum   = null;
+    let curMeeting = null;
 
-@app.callback(
-    Output("meetings-container", "children"),
-    Input("meetings-data", "data"),
-)
-def render_meetings(meetings):
-    """Build clickable meeting cards."""
-    if not meetings:
-        return html.P("No meetings found.", style={"color": "#666"})
+    // ── Navigation ───────────────────────────────────────────
+    function goHome() {
+        curForum = curMeeting = null;
+        el('scrHome').classList.add('on');
+        el('scrAgenda').classList.remove('on');
+        renderHome();
+    }
+    function openForum(fid) {
+        curForum = fid;
+        curMeeting = data[fid].meetings[0].id;
+        el('scrHome').classList.remove('on');
+        el('scrAgenda').classList.add('on');
+        renderSidebar();
+        renderMain();
+    }
+    function selectMeeting(mid) {
+        curMeeting = mid;
+        renderSidebar();
+        renderMain();
+    }
 
-    cards = []
-    for m in meetings:
-        cards.append(
-            html.Div(
-                id={"type": "mtg-card", "index": m["id"]},
-                n_clicks=0,
-                style={**CARD, "cursor": "pointer"},
-                children=[
-                    html.H3(
-                        m.get("title", "Untitled"),
-                        style={"margin": "0 0 8px", "color": "#0B1D3A"},
-                    ),
-                    html.P(
-                        m.get("description", ""),
-                        style={
-                            "color": "#666",
-                            "margin": "0 0 12px",
-                            "fontSize": "14px",
-                        },
-                    ),
-                    html.Div(
-                        [
-                            html.Span(
-                                f"⏱ {m.get('duration', 60)} min",
-                                style={
-                                    "color": "#1E4EBC",
-                                    "fontSize": "13px",
-                                    "marginRight": "16px",
-                                },
-                            ),
-                            html.Span(
-                                f"📋 {m.get('forum', '').upper()}",
-                                style={"color": "#666", "fontSize": "13px"},
-                            ),
-                        ]
-                    ),
-                ],
-            )
-        )
-    return cards
+    // ── Render: home ─────────────────────────────────────────
+    function renderHome() {
+        const g = el('forumGrid');
+        g.innerHTML = '';
+        for (const [fid, f] of Object.entries(data)) {
+            const c = document.createElement('div');
+            c.className = 'forum-card';
+            c.onclick = () => openForum(fid);
+            c.innerHTML =
+                '<h2>' + esc(f.title) + '</h2>' +
+                '<p>'  + esc(f.desc)  + '</p>' +
+                '<span class="forum-badge">' + f.meetings.length + ' meetings</span>';
+            g.appendChild(c);
+        }
+    }
 
+    // ── Render: sidebar ──────────────────────────────────────
+    function renderSidebar() {
+        const f = data[curForum];
+        el('sbTitle').textContent = f.title;
+        const list = el('sbList');
+        list.innerHTML = '';
+        for (const m of f.meetings) {
+            const d = document.createElement('div');
+            d.className = 'sb-item' + (m.id === curMeeting ? ' on' : '');
+            d.onclick = () => selectMeeting(m.id);
+            d.innerHTML =
+                '<div class="sb-date">' + esc(m.date) + '</div>' +
+                '<div class="sb-cnt">'  + m.items.length + ' item' + (m.items.length !== 1 ? 's' : '') + '</div>';
+            list.appendChild(d);
+        }
+    }
 
-@app.callback(
-    [
-        Output("selected-meeting", "data"),
-        Output("meetings-view", "style"),
-        Output("agenda-view", "style"),
-    ],
-    [
-        Input({"type": "mtg-card", "index": ALL}, "n_clicks"),
-        Input("back-btn", "n_clicks"),
-    ],
-    State("meetings-data", "data"),
-    prevent_initial_call=True,
-)
-def navigate(card_clicks, _back, meetings):
-    """Switch between meetings list and agenda detail."""
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
+    // ── Render: main panel ───────────────────────────────────
+    function renderMain() {
+        const m = data[curForum].meetings.find(x => x.id === curMeeting);
+        el('mnDate').textContent = m.date;
 
-    trigger = ctx.triggered[0]["prop_id"]
+        // time budget
+        const used = m.items.reduce((s, i) => s + i.duration, 0);
+        const pct  = Math.min(Math.round(used / CAP * 100), 100);
+        el('tbText').textContent = used + ' / ' + CAP + ' minutes';
+        const fill = el('tbFill');
+        fill.style.width = pct + '%';
+        fill.style.background = pct > 90 ? '#e4202d' : pct > 75 ? '#f0ad4e' : '#1e4ebc';
 
-    # back button
-    if trigger == "back-btn.n_clicks":
-        return None, {"display": "block"}, {"display": "none"}
+        // items
+        const box = el('agItems');
+        box.innerHTML = '';
+        if (!m.items.length) {
+            box.innerHTML = '<div class="empty">No agenda items yet. Click "+ Add Item" to get started.</div>';
+            return;
+        }
+        for (const it of m.items) {
+            const row = document.createElement('div');
+            row.className = 'ag-item';
+            row.innerHTML =
+                '<div style="flex:1">' +
+                    '<div class="it-topic">' + esc(it.topic) + '</div>' +
+                    (it.presenter ? '<div class="it-pres">Presenter: ' + esc(it.presenter) + '</div>' : '') +
+                    (it.desc      ? '<div class="it-desc">' + esc(it.desc) + '</div>' : '') +
+                    '<span class="it-dur">' + it.duration + ' min</span>' +
+                '</div>' +
+                '<button class="btn btn-d" data-rm="' + it.id + '">Remove</button>';
+            box.appendChild(row);
+        }
+        box.querySelectorAll('[data-rm]').forEach(b =>
+            b.addEventListener('click', () => removeItem(b.dataset.rm)));
+    }
 
-    # meeting card
-    if not any(n for n in card_clicks if n):
-        raise PreventUpdate
+    // ── Add / remove ─────────────────────────────────────────
+    function toggleForm() {
+        el('addForm').classList.toggle('hid');
+        if (!el('addForm').classList.contains('hid')) el('fTopic').focus();
+    }
 
-    tid = json.loads(trigger.split(".")[0])
-    mtg = next((m for m in meetings if m["id"] == tid["index"]), None)
-    if not mtg:
-        raise PreventUpdate
+    function addItem() {
+        const topic = el('fTopic').value.trim();
+        if (!topic) { alert('Please enter a topic'); return; }
+        const dur  = parseInt(el('fDur').value, 10);
+        const pres = el('fPres').value.trim();
+        const desc = el('fDesc').value.trim();
+        const m = data[curForum].meetings.find(x => x.id === curMeeting);
+        m.items.push({ id:'i' + Date.now(), duration:dur, topic:topic, presenter:pres, desc:desc });
+        el('fTopic').value = ''; el('fDur').value = '15'; el('fPres').value = ''; el('fDesc').value = '';
+        toggleForm();
+        renderSidebar();
+        renderMain();
+    }
 
-    return mtg, {"display": "none"}, {"display": "block"}
+    function removeItem(iid) {
+        const m = data[curForum].meetings.find(x => x.id === curMeeting);
+        const idx = m.items.findIndex(i => i.id === iid);
+        if (idx >= 0) { m.items.splice(idx, 1); renderSidebar(); renderMain(); }
+    }
 
+    // ── Helpers ──────────────────────────────────────────────
+    function el(id) { return document.getElementById(id); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-@app.callback(
-    [
-        Output("agenda-title", "children"),
-        Output("agenda-desc", "children"),
-        Output("time-bar", "children"),
-        Output("agenda-items", "children"),
-    ],
-    Input("selected-meeting", "data"),
-)
-def render_agenda(meeting):
-    """Render agenda items for the selected meeting."""
-    if not meeting:
-        raise PreventUpdate
+    // ── Boot ─────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', renderHome);
 
-    try:
-        dl = get_data_layer()
-        items = dl.get_agenda_items(meeting["id"])
-    except Exception:
-        items = []
+    return { goHome, openForum, selectMeeting, toggleForm, addItem, removeItem };
+})();
+</script>
+</body>
+</html>
+'''
 
-    total = meeting.get("duration", 60)
-    used = sum(i.get("duration", 0) for i in items)
-    remaining = total - used
-    pct = min(100, used / total * 100) if total else 0
-    bar_color = "#198754" if remaining > 15 else "#ffc107" if remaining > 0 else "#dc3545"
-
-    time_bar = html.Div(
-        [
-            html.Div(
-                [
-                    html.Span(f"Time: {used}/{total} min used", style={"fontSize": "13px"}),
-                    html.Span(
-                        f"{remaining} min remaining",
-                        style={"fontSize": "13px", "fontWeight": "600", "color": bar_color},
-                    ),
-                ],
-                style={
-                    "display": "flex",
-                    "justifyContent": "space-between",
-                    "marginBottom": "4px",
-                },
-            ),
-            html.Div(
-                html.Div(
-                    style={
-                        "width": f"{pct}%",
-                        "height": "8px",
-                        "background": bar_color,
-                        "borderRadius": "4px",
-                        "transition": "width 0.3s",
-                    }
-                ),
-                style={
-                    "background": "#e9ecef",
-                    "borderRadius": "4px",
-                    "overflow": "hidden",
-                },
-            ),
-        ]
-    )
-
-    if not items:
-        items_el = html.P(
-            "No agenda items yet. Add one below.",
-            style={"color": "#666", "padding": "20px 0"},
-        )
-    else:
-        rows = []
-        for item in items:
-            rows.append(
-                html.Div(
-                    style={**CARD, "cursor": "default", "display": "flex", "alignItems": "center"},
-                    children=[
-                        html.Div(
-                            style={"flex": "1"},
-                            children=[
-                                html.H4(
-                                    item.get("title", "Untitled"),
-                                    style={"margin": "0 0 4px", "color": "#0B1D3A"},
-                                ),
-                                html.P(
-                                    item.get("topic", ""),
-                                    style={
-                                        "color": "#666",
-                                        "margin": "0 0 8px",
-                                        "fontSize": "14px",
-                                    },
-                                ),
-                                html.Div(
-                                    [
-                                        html.Span(
-                                            f"⏱ {item.get('duration', 0)} min",
-                                            style={
-                                                "marginRight": "16px",
-                                                "fontSize": "13px",
-                                                "color": "#1E4EBC",
-                                            },
-                                        ),
-                                        html.Span(
-                                            f"👤 {item.get('presenter', 'TBD')}",
-                                            style={"fontSize": "13px", "color": "#666"},
-                                        ),
-                                    ]
-                                ),
-                            ],
-                        ),
-                        html.Div(
-                            style={"display": "flex", "gap": "8px", "alignItems": "center"},
-                            children=[
-                                html.Button(
-                                    "✓ Approve",
-                                    id={"type": "approve-btn", "index": item["id"]},
-                                    n_clicks=0,
-                                    style=BTN_OK,
-                                ),
-                                html.Button(
-                                    "✕ Delete",
-                                    id={"type": "delete-btn", "index": item["id"]},
-                                    n_clicks=0,
-                                    style=BTN_DEL,
-                                ),
-                            ],
-                        ),
-                    ],
-                )
-            )
-        items_el = html.Div(rows)
-
-    return meeting.get("title", "Meeting"), meeting.get("description", ""), time_bar, items_el
-
-
-@app.callback(
-    [
-        Output("add-feedback", "children"),
-        Output("selected-meeting", "data", allow_duplicate=True),
-        Output("inp-title", "value"),
-        Output("inp-topic", "value"),
-        Output("inp-presenter", "value"),
-    ],
-    Input("add-btn", "n_clicks"),
-    [
-        State("inp-title", "value"),
-        State("inp-topic", "value"),
-        State("inp-duration", "value"),
-        State("inp-presenter", "value"),
-        State("selected-meeting", "data"),
-    ],
-    prevent_initial_call=True,
-)
-def add_item(n, title, topic, duration, presenter, meeting):
-    """Add agenda item to the selected meeting."""
-    if not n or not meeting:
-        raise PreventUpdate
-    if not title:
-        return (
-            html.Span("Please enter a title.", style={"color": "#dc3545"}),
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-        )
-    try:
-        dl = get_data_layer()
-        dl.create_agenda_item(
-            meeting["id"], title, topic or "", duration or 15, presenter or ""
-        )
-        refreshed = {**meeting, "_r": meeting.get("_r", 0) + 1}
-        return (
-            html.Span("✓ Item added!", style={"color": "#198754"}),
-            refreshed,
-            "",
-            "",
-            "",
-        )
-    except Exception as exc:
-        return (
-            html.Span(f"Error: {exc}", style={"color": "#dc3545"}),
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-        )
-
-
-@app.callback(
-    Output("selected-meeting", "data", allow_duplicate=True),
-    Input({"type": "delete-btn", "index": ALL}, "n_clicks"),
-    State("selected-meeting", "data"),
-    prevent_initial_call=True,
-)
-def delete_item(n_clicks, meeting):
-    """Delete an agenda item."""
-    if not any(n for n in n_clicks if n) or not meeting:
-        raise PreventUpdate
-    ctx = dash.callback_context
-    tid = json.loads(ctx.triggered[0]["prop_id"].split(".")[0])
-    try:
-        dl = get_data_layer()
-        dl.delete_agenda_item(tid["index"])
-    except Exception:
-        pass
-    return {**meeting, "_r": meeting.get("_r", 0) + 1}
-
-
-@app.callback(
-    Output("selected-meeting", "data", allow_duplicate=True),
-    Input({"type": "approve-btn", "index": ALL}, "n_clicks"),
-    State("selected-meeting", "data"),
-    prevent_initial_call=True,
-)
-def approve_item(n_clicks, meeting):
-    """Approve an agenda item."""
-    if not any(n for n in n_clicks if n) or not meeting:
-        raise PreventUpdate
-    ctx = dash.callback_context
-    tid = json.loads(ctx.triggered[0]["prop_id"].split(".")[0])
-    try:
-        dl = get_data_layer()
-        dl.set_approval(tid["index"], "current_user", True)
-    except Exception:
-        pass
-    return {**meeting, "_r": meeting.get("_r", 0) + 1}
+# Minimal Dash layout — required by Dash internals but not visible
+app.layout = html.Div(id="hidden-dash-root", style={"display": "none"})
 
 
 # ============================================================================
-# Health route on the underlying Flask server
+# Health route
 # ============================================================================
 
 @server.route("/health")
 def health_check():
-    import json as jlib
-
+    import json
     return (
-        jlib.dumps(
-            {
-                "status": "ok",
-                "app": "CDDA Meeting Manager",
-                "mode": "demo" if config.DEMO_MODE else "live",
-                "environment": config.APP_ENVIRONMENT,
-            }
-        ),
+        json.dumps({
+            "status": "ok",
+            "app": "CDDA Meeting Manager",
+            "mode": "demo" if config.DEMO_MODE else "live",
+            "environment": config.APP_ENVIRONMENT,
+        }),
         200,
         {"Content-Type": "application/json"},
     )
