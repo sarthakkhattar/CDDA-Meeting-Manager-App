@@ -12,34 +12,24 @@ vanilla HTML / CSS / JS that calls Flask API routes for data.
 import json
 import dash
 from dash import html, dcc
-from flask import jsonify, request as flask_request
+from flask import Blueprint, jsonify, request as flask_request
 
 import config
 from fabric_graph import get_data_layer
 
 # ============================================================================
-# Dash App — we only need Dash as the WSGI wrapper for Posit Connect
+# Flask API Blueprint — registered BEFORE Dash to avoid route conflicts
 # ============================================================================
 
-app = dash.Dash(
-    __name__,
-    suppress_callback_exceptions=True,
-    title="CDDA Meeting Manager",
-)
-server = app.server  # Required for Posit Connect entrypoint app:server
+api_bp = Blueprint("api", __name__)
 
 
-# ============================================================================
-# Flask API routes — read/write Fabric Lakehouse
-# ============================================================================
-
-@server.route("/api/forums")
+@api_bp.route("/api/forums")
 def api_forums():
     """Return all meeting forums."""
     try:
         dl = get_data_layer()
         meetings = dl.get_meetings()
-        # Group agenda items by meeting to get counts
         forums = []
         for m in meetings:
             items = dl.get_agenda_items(m["id"])
@@ -57,7 +47,7 @@ def api_forums():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-@server.route("/api/forums/<forum_id>/items")
+@api_bp.route("/api/forums/<forum_id>/items")
 def api_forum_items(forum_id):
     """Return all agenda items for a forum."""
     try:
@@ -69,7 +59,7 @@ def api_forum_items(forum_id):
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-@server.route("/api/items", methods=["POST"])
+@api_bp.route("/api/items", methods=["POST"])
 def api_add_item():
     """Add an agenda item."""
     try:
@@ -90,7 +80,7 @@ def api_add_item():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-@server.route("/api/items/<item_id>", methods=["DELETE"])
+@api_bp.route("/api/items/<item_id>", methods=["DELETE"])
 def api_delete_item(item_id):
     """Delete an agenda item."""
     try:
@@ -102,7 +92,7 @@ def api_delete_item(item_id):
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-@server.route("/health")
+@api_bp.route("/health")
 def health_check():
     return (
         json.dumps({
@@ -114,6 +104,23 @@ def health_check():
         200,
         {"Content-Type": "application/json"},
     )
+
+
+# ============================================================================
+# Dash App — we only need Dash as the WSGI wrapper for Posit Connect
+# ============================================================================
+
+app = dash.Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    title="CDDA Meeting Manager",
+    use_pages=False,
+    pages_folder="",
+)
+server = app.server  # Required for Posit Connect entrypoint app:server
+
+# Register API blueprint on the Flask server
+server.register_blueprint(api_bp)
 
 
 # ============================================================================
