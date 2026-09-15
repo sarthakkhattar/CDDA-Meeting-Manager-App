@@ -2,7 +2,7 @@
   "version": 1,
   "locale": "en_US.UTF-8",
   "metadata": {
-    "appmode": "python-dash",
+    "appmode": "python-api",
     "entrypoint": "app:server"
   },
   "python": {
@@ -14,7 +14,7 @@
   },
   "files": {
     "app.py": {
-      "checksum": "769745dabfa7f09170fca8c5c51c429f"
+      "checksum": "03fe5c224b4c48e9bb3bc7724817a5e6"
     },
     "config.py": {
       "checksum": "069e03d91ded53ec7b40e3ea7f755bd7"
@@ -22,11 +22,14 @@
     "fabric_graph.py": {
       "checksum": "fd4afe214cc8e038291f6d716083053c"
     },
+    "index.html": {
+      "checksum": "974fb4dca67b142a2fb225d91d73d6e1"
+    },
     "make_manifest.py": {
-      "checksum": "16203c75578ddaf3db990fdab1f18c83"
+      "checksum": "ca62f22224d52005c9d78217b1f84dbf"
     },
     "manifest.json": {
-      "checksum": "c28388f1c6f8465e9c658595a8505512"
+      "checksum": "b8c57a3863b8a74fc7610fab40036b90"
     },
     "README.md": {
       "checksum": "f1d6b3c504bc593014daf1d713a54730"
