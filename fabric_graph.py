@@ -317,11 +317,25 @@ class FabricDataLayer:
     def _demo_meetings(self) -> List[Dict]:
         return [
             {"id": "mtg_1", "title": "CDDA Open Office Hours",
-             "description": "Regular forum for open discussions",
+             "description": (
+                 "CDDA Open Office Hours is a standing, open-access forum run "
+                 "within the Clinical Development & Design (CDDA) organization "
+                 "to support knowledge sharing, Q&A, and informal problem-solving "
+                 "across CDDA initiatives, tools, and ways of working. It is "
+                 "designed to complement formal governance and project meetings "
+                 "by providing a low-barrier, interactive space for discussion."
+             ),
              "forum": "ooh", "duration": 60,
              "created_at": "2024-09-01T10:00:00"},
-            {"id": "mtg_2", "title": "Clinical Design & Statistics Review",
-             "description": "Review forum for clinical design topics",
+            {"id": "mtg_2", "title": "Clinical Design & Statistics Review (CDSR)",
+             "description": (
+                 "The Clinical Design & Statistics Review (CDSR) is a standing "
+                 "review forum where clinical design and statistics leaders come "
+                 "together to evaluate study designs for Phase 2 and later-phase "
+                 "interventional trials. The group provides expert input early in "
+                 "the process to help teams make informed design decisions, ensure "
+                 "scientific rigor, and share learnings across therapeutic areas."
+             ),
              "forum": "cdsr", "duration": 90,
              "created_at": "2024-09-03T14:00:00"},
         ]
