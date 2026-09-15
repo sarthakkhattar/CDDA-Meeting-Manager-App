@@ -52,20 +52,11 @@ class FabricDataLayer:
 
     def _check_connection(self) -> bool:
         try:
-            path = _table_path("cdda_meetings")
-            print(f"[fabric] Connecting to: {path}", flush=True)
-            print(f"[fabric] Workspace ID: {config.FABRIC_WORKSPACE_ID}", flush=True)
-            print(f"[fabric] Lakehouse ID: {config.FABRIC_LAKEHOUSE_ID}", flush=True)
-            print(f"[fabric] Tenant ID: {config.FABRIC_TENANT_ID}", flush=True)
-            print(f"[fabric] Client ID: {config.FABRIC_CLIENT_ID}", flush=True)
-            print(f"[fabric] Client Secret: {'***' + config.FABRIC_CLIENT_SECRET[-4:] if config.FABRIC_CLIENT_SECRET else 'EMPTY'}", flush=True)
             from deltalake import DeltaTable
-            dt = DeltaTable(path, storage_options=self._opts)
-            rows = dt.to_pyarrow_table().to_pylist()
-            print(f"[fabric] Connection OK — {len(rows)} meetings found", flush=True)
+            DeltaTable(_table_path("cdda_meetings"), storage_options=self._opts)
             return True
         except Exception as exc:
-            print(f"[fabric] connection check FAILED: {type(exc).__name__}: {exc}", flush=True)
+            print(f"[fabric] connection check failed: {exc}")
             return False
 
     def health(self) -> str:
@@ -82,14 +73,10 @@ class FabricDataLayer:
             return self._demo_meetings()
         try:
             from deltalake import DeltaTable
-            path = _table_path("cdda_meetings")
-            print(f"[fabric] get_meetings from: {path}", flush=True)
-            dt = DeltaTable(path, storage_options=self._opts)
-            rows = dt.to_pyarrow_table().to_pylist()
-            print(f"[fabric] get_meetings returned {len(rows)} rows", flush=True)
-            return rows
+            dt = DeltaTable(_table_path("cdda_meetings"), storage_options=self._opts)
+            return dt.to_pyarrow_table().to_pylist()
         except Exception as exc:
-            print(f"[fabric] get_meetings ERROR: {type(exc).__name__}: {exc}", flush=True)
+            print(f"[fabric] get_meetings error: {exc}")
             return []
 
     def get_meeting(self, meeting_id: str) -> Optional[Dict]:
