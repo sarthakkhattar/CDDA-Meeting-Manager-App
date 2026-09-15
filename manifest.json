@@ -2,7 +2,7 @@
   "version": 1,
   "locale": "en_US.UTF-8",
   "metadata": {
-    "appmode": "python-api",
+    "appmode": "python-dash",
     "entrypoint": "app:server"
   },
   "python": {
@@ -14,7 +14,7 @@
   },
   "files": {
     "app.py": {
-      "checksum": "03fe5c224b4c48e9bb3bc7724817a5e6"
+      "checksum": "abc52707b4ee441dbcbda23ac99f5d15"
     },
     "config.py": {
       "checksum": "069e03d91ded53ec7b40e3ea7f755bd7"
@@ -26,10 +26,10 @@
       "checksum": "974fb4dca67b142a2fb225d91d73d6e1"
     },
     "make_manifest.py": {
-      "checksum": "ca62f22224d52005c9d78217b1f84dbf"
+      "checksum": "16203c75578ddaf3db990fdab1f18c83"
     },
     "manifest.json": {
-      "checksum": "b8c57a3863b8a74fc7610fab40036b90"
+      "checksum": "8ea85f20c44e3268217a8384c06e122b"
     },
     "README.md": {
       "checksum": "f1d6b3c504bc593014daf1d713a54730"

@@ -33,7 +33,7 @@ manifest = {
     'version': 1,
     'locale': 'en_US.UTF-8',
     'metadata': {
-        'appmode': 'python-api',
+        'appmode': 'python-dash',
         'entrypoint': 'app:server'
     },
     'python': {
