@@ -48,15 +48,21 @@ def _load_all_data():
 
 class CddaDash(dash.Dash):
     def interpolate_index(self, **kwargs):
-        page = super().interpolate_index(**kwargs)
-        forums, all_items = _load_all_data()
-        tag = (
-            "<script>"
-            f"window.__FORUMS__={json.dumps(forums,default=str)};"
-            f"window.__ALL_ITEMS__={json.dumps(all_items,default=str)};"
-            "</script>"
-        )
-        return page.replace("</head>", tag + "\n</head>")
+        try:
+            page = super().interpolate_index(**kwargs)
+            forums, all_items = _load_all_data()
+            print(f"[inject] interpolate_index called — {len(forums)} forums", flush=True)
+            tag = (
+                "<script>"
+                f"window.__FORUMS__={json.dumps(forums,default=str)};"
+                f"window.__ALL_ITEMS__={json.dumps(all_items,default=str)};"
+                f"window.__INJECT_OK__=true;"
+                "</script>"
+            )
+            return page.replace("</head>", tag + "\n</head>")
+        except Exception as exc:
+            print(f"[inject] interpolate_index ERROR: {type(exc).__name__}: {exc}", flush=True)
+            return super().interpolate_index(**kwargs)
 
 
 app = CddaDash(
@@ -214,7 +220,15 @@ const MM=(()=>{
     const BASE=window.location.pathname.replace(/\/$/,'');
 
     /* ── read server-injected data ─────────────────────────── */
-    function loadForums(){ forums=window.__FORUMS__||[]; renderHome(); }
+    function loadForums(){
+        forums=window.__FORUMS__||[];
+        console.log('[MM] __INJECT_OK__=', window.__INJECT_OK__, 'forums=', forums.length);
+        if(!forums.length && !window.__INJECT_OK__){
+            el('forumGrid').innerHTML='<div class="empty">Data injection failed. Check Posit logs for [inject] messages.</div>';
+            return;
+        }
+        renderHome();
+    }
     function loadItems(fid){ items=(window.__ALL_ITEMS__||{})[fid]||[]; }
 
     /* ── mutations via Dash _dash-update-component ─────────── */
