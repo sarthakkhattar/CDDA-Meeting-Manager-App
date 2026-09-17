@@ -52,11 +52,16 @@ class FabricDataLayer:
 
     def _check_connection(self) -> bool:
         try:
+            path = _table_path("cdda_meetings")
+            print(f"[fabric] Trying path: {path}", flush=True)
+            print(f"[fabric] Client ID: {config.FABRIC_CLIENT_ID}", flush=True)
             from deltalake import DeltaTable
-            DeltaTable(_table_path("cdda_meetings"), storage_options=self._opts)
+            dt = DeltaTable(path, storage_options=self._opts)
+            rows = dt.to_pyarrow_table().to_pylist()
+            print(f"[fabric] ✅ Connection OK — {len(rows)} meetings found", flush=True)
             return True
         except Exception as exc:
-            print(f"[fabric] connection check failed: {exc}")
+            print(f"[fabric] connection check FAILED: {type(exc).__name__}: {exc}", flush=True)
             return False
 
     def health(self) -> str:
