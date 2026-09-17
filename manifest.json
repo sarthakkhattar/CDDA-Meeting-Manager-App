@@ -20,13 +20,13 @@
       "checksum": "069e03d91ded53ec7b40e3ea7f755bd7"
     },
     "fabric_graph.py": {
-      "checksum": "0f6c1eb800822cb60020c277ace93035"
+      "checksum": "c0505d1235bc991ad151fc78d7424bcb"
     },
     "make_manifest.py": {
       "checksum": "6765a291567af369aa2f38c8c5c01f23"
     },
     "manifest.json": {
-      "checksum": "9d835179a716704b1afb66095a8702fc"
+      "checksum": "ebde3f74a542e90035f703931903cf0c"
     },
     "README.md": {
       "checksum": "f1d6b3c504bc593014daf1d713a54730"

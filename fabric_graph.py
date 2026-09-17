@@ -14,7 +14,7 @@ import config
 
 ONELAKE_BASE = (
     f"abfss://{config.FABRIC_WORKSPACE_ID}@onelake.dfs.fabric.microsoft.com"
-    f"/{config.FABRIC_LAKEHOUSE_ID}/Tables"
+    f"/{config.FABRIC_LAKEHOUSE_ID}/Tables/dbo"
 )
 
 
