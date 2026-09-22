@@ -178,13 +178,17 @@ class FabricDataLayer:
             from deltalake import DeltaTable
             dt = DeltaTable(_table_path("agenda_items"), storage_options=self._opts)
             rows = dt.to_pyarrow_table().to_pylist()
-            return [r for r in rows if r.get("meeting_id") == meeting_id]
+            filtered = [r for r in rows if r.get("meeting_id") == meeting_id]
+            if instance_id:
+                filtered = [r for r in filtered if r.get("instance_id") == instance_id]
+            return filtered
         except Exception as exc:
             print(f"[fabric] get_agenda_items error: {exc}")
             return []
 
     def create_agenda_item(self, meeting_id: str, title: str, topic: str,
-                           duration: int, presenter: str) -> Optional[str]:
+                           duration: int, presenter: str,
+                           instance_id: Optional[str] = None) -> Optional[str]:
         iid = f"itm_{int(datetime.now().timestamp())}"
         if config.DEMO_MODE:
             return iid
@@ -197,6 +201,7 @@ class FabricDataLayer:
             row = pa.table({
                 "id": [iid],
                 "meeting_id": [meeting_id],
+                "instance_id": [instance_id or ""],
                 "title": [title],
                 "topic": [topic],
                 "duration": [duration],

@@ -621,7 +621,10 @@ def add_item(n, title, topic, duration, presenter, meeting, instance):
         return html.Span("Please enter a title.", style={"color": "#dc3545"}), no_update, no_update, no_update, no_update
     try:
         dl = get_data_layer()
-        dl.create_agenda_item(meeting["id"], title, topic or "", duration or 15, presenter or "")
+        dl.create_agenda_item(
+            meeting["id"], title, topic or "", duration or 15, presenter or "",
+            instance_id=instance.get("id") if instance else None,
+        )
         refreshed = {**instance, "_r": instance.get("_r", 0) + 1}
         return html.Span("✓ Item added!", style={"color": "#198754"}), refreshed, "", "", ""
     except Exception as exc:
