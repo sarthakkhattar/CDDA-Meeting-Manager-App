@@ -14,25 +14,34 @@
   },
   "files": {
     "app.py": {
-      "checksum": "85f3b92ccbce0468b471558cd06a77fa"
+      "checksum": "aef754bd4af3b57aed898269345b7acb"
     },
     "config.py": {
-      "checksum": "069e03d91ded53ec7b40e3ea7f755bd7"
+      "checksum": "32dbac6ff911f64b32996b8d24f25525"
     },
     "fabric_graph.py": {
-      "checksum": "bf7abc1c26f18e6463bd1ca7f43d33de"
+      "checksum": "35b2e4969347fe47b88f71a36d0e4e6c"
     },
     "make_manifest.py": {
       "checksum": "6765a291567af369aa2f38c8c5c01f23"
     },
     "manifest.json": {
-      "checksum": "5e998e02966ef7cacd5726514977e462"
+      "checksum": "5bcbcb32955c51f3acb8ffd3c0afb79b"
     },
     "README.md": {
       "checksum": "f1d6b3c504bc593014daf1d713a54730"
     },
     "requirements.txt": {
       "checksum": "da54b5cf11d7163834d3f445492c7ab1"
+    },
+    "test_features.py": {
+      "checksum": "67547879863e4789a45eabf89935d23b"
+    },
+    "test_setup_env.txt": {
+      "checksum": "7d1930eb98fd291d4c5a8d800fe657f4"
+    },
+    "test_ui_checklist.py": {
+      "checksum": "eb69cf734072fd2c3a6c769d14464504"
     }
   }
 }

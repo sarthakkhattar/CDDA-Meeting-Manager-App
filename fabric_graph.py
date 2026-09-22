@@ -6,7 +6,25 @@ Uses the deltalake library for Delta Lake table operations on OneLake.
 from typing import List, Dict, Optional
 from datetime import datetime
 
+import re
 import config
+
+# ============================================================================
+# Input sanitization
+# ============================================================================
+
+
+def _safe_id(val: str) -> str:
+    """Validate that a value is safe to interpolate into a Delta Lake predicate.
+
+    Rejects any value containing characters that could alter predicate logic
+    (single quotes, semicolons, dashes used for SQL comments, etc.).
+    Only alphanumerics, underscores, hyphens, and dots are allowed.
+    """
+    if not isinstance(val, str) or not re.match(r'^[A-Za-z0-9_.\-]+$', val):
+        raise ValueError(f"Invalid identifier: contains disallowed characters")
+    return val
+
 
 # ============================================================================
 # OneLake path helpers
@@ -34,6 +52,39 @@ def _storage_opts() -> dict:
 
 
 # ============================================================================
+# Date helpers
+# ============================================================================
+
+def generate_recurring_dates(day_of_week: int, start_date_str: str,
+                             end_date_str: str) -> List[Dict]:
+    """Generate recurring weekly dates.
+
+    day_of_week: 0=Monday ... 6=Sunday
+    start_date_str, end_date_str: 'YYYY-MM-DD'
+    Returns: [{"date": "YYYY-MM-DD", "display_text": "DD Mon YYYY"}, ...]
+    """
+    from datetime import timedelta
+
+    start = datetime.strptime(start_date_str, "%Y-%m-%d")
+    end = datetime.strptime(end_date_str, "%Y-%m-%d")
+
+    # Find first occurrence of day_of_week on or after start
+    days_ahead = day_of_week - start.weekday()
+    if days_ahead < 0:
+        days_ahead += 7
+    current = start + timedelta(days=days_ahead)
+
+    dates: List[Dict] = []
+    while current <= end:
+        dates.append({
+            "date": current.strftime("%Y-%m-%d"),
+            "display_text": current.strftime("%d %b %Y"),
+        })
+        current += timedelta(days=7)
+    return dates
+
+
+# ============================================================================
 # Data layer
 # ============================================================================
 
@@ -54,7 +105,7 @@ class FabricDataLayer:
         try:
             path = _table_path("cdda_meetings")
             print(f"[fabric] Trying path: {path}", flush=True)
-            print(f"[fabric] Client ID: {config.FABRIC_CLIENT_ID}", flush=True)
+            print(f"[fabric] Client ID: ...{config.FABRIC_CLIENT_ID[-4:]}", flush=True)
             from deltalake import DeltaTable
             dt = DeltaTable(path, storage_options=self._opts)
             rows = dt.to_pyarrow_table().to_pylist()
@@ -125,8 +176,9 @@ class FabricDataLayer:
         try:
             from deltalake import DeltaTable
             dt = DeltaTable(_table_path("cdda_meetings"), storage_options=self._opts)
-            updates = {k: f"'{v}'" for k, v in kwargs.items()}
-            dt.update(predicate=f"id = '{meeting_id}'", updates=updates)
+            safe_mid = _safe_id(meeting_id)
+            updates = {k: f"'{_safe_id(str(v))}'" for k, v in kwargs.items()}
+            dt.update(predicate=f"id = '{safe_mid}'", updates=updates)
             return True
         except Exception as exc:
             print(f"[fabric] update_meeting error: {exc}")
@@ -137,14 +189,15 @@ class FabricDataLayer:
             return True
         try:
             from deltalake import DeltaTable
+            safe_mid = _safe_id(meeting_id)
             # cascade: agenda items first
             try:
                 dt_items = DeltaTable(_table_path("agenda_items"), storage_options=self._opts)
-                dt_items.delete(f"meeting_id = '{meeting_id}'")
+                dt_items.delete(f"meeting_id = '{safe_mid}'")
             except Exception:
                 pass
             dt = DeltaTable(_table_path("cdda_meetings"), storage_options=self._opts)
-            dt.delete(f"id = '{meeting_id}'")
+            dt.delete(f"id = '{safe_mid}'")
             return True
         except Exception as exc:
             print(f"[fabric] delete_meeting error: {exc}")
@@ -167,13 +220,96 @@ class FabricDataLayer:
             print(f"[fabric] get_meeting_instances error: {exc}")
             return []
 
+    def create_meeting_instance(self, meeting_id: str, date_str: str,
+                                display_text: str) -> Optional[str]:
+        """Create a single meeting date instance."""
+        iid = f"inst_{int(datetime.now().timestamp())}"
+        if config.DEMO_MODE:
+            return iid
+        try:
+            import pyarrow as pa
+            from deltalake import write_deltalake
+            row = pa.table({
+                "id": [iid],
+                "meeting_id": [meeting_id],
+                "date": [date_str],
+                "display_text": [display_text],
+                "is_available": [True],
+            })
+            write_deltalake(_table_path("meeting_instances"), row,
+                            mode="append", storage_options=self._opts)
+            return iid
+        except Exception as exc:
+            print(f"[fabric] create_meeting_instance error: {exc}")
+            return None
+
+    def create_meeting_instances_bulk(self, meeting_id: str,
+                                      date_list: List[Dict]) -> List[str]:
+        """Create multiple meeting date instances in a single write.
+
+        date_list: [{"date": "YYYY-MM-DD", "display_text": "DD Mon YYYY"}, ...]
+        """
+        ts = int(datetime.now().timestamp())
+        ids = [f"inst_{ts}_{i}" for i in range(len(date_list))]
+        if config.DEMO_MODE:
+            return ids
+        try:
+            import pyarrow as pa
+            from deltalake import write_deltalake
+            rows = pa.table({
+                "id": ids,
+                "meeting_id": [meeting_id] * len(date_list),
+                "date": [d["date"] for d in date_list],
+                "display_text": [d["display_text"] for d in date_list],
+                "is_available": [True] * len(date_list),
+            })
+            write_deltalake(_table_path("meeting_instances"), rows,
+                            mode="append", storage_options=self._opts)
+            return ids
+        except Exception as exc:
+            print(f"[fabric] create_meeting_instances_bulk error: {exc}")
+            return []
+
+    def delete_meeting_instance(self, instance_id: str, cascade: bool = False) -> bool:
+        """Delete a meeting instance. If cascade, remove its agenda items and docs first."""
+        if config.DEMO_MODE:
+            return True
+        try:
+            from deltalake import DeltaTable
+            safe_iid = _safe_id(instance_id)
+            if cascade:
+                # delete documents for each agenda item in this instance
+                try:
+                    dt_items = DeltaTable(_table_path("agenda_items"), storage_options=self._opts)
+                    items = [r for r in dt_items.to_pyarrow_table().to_pylist()
+                             if r.get("instance_id") == instance_id]
+                    for item in items:
+                        try:
+                            dt_docs = DeltaTable(_table_path("documents"), storage_options=self._opts)
+                            dt_docs.delete(f"item_id = '{_safe_id(item['id'])}'")
+                        except Exception:
+                            pass
+                    dt_items.delete(f"instance_id = '{safe_iid}'")
+                except Exception:
+                    pass
+            dt = DeltaTable(_table_path("meeting_instances"), storage_options=self._opts)
+            dt.delete(f"id = '{safe_iid}'")
+            return True
+        except Exception as exc:
+            print(f"[fabric] delete_meeting_instance error: {exc}")
+            return False
+
     # ==================================================================
     # Agenda Items
     # ==================================================================
 
-    def get_agenda_items(self, meeting_id: str, instance_id: Optional[str] = None) -> List[Dict]:
+    def get_agenda_items(self, meeting_id: str, instance_id: Optional[str] = None,
+                         include_archived: bool = False) -> List[Dict]:
         if config.DEMO_MODE:
-            return self._demo_agenda_items(meeting_id, instance_id)
+            items = self._demo_agenda_items(meeting_id, instance_id)
+            if not include_archived:
+                items = [r for r in items if r.get("status") != "Archived"]
+            return items
         try:
             from deltalake import DeltaTable
             dt = DeltaTable(_table_path("agenda_items"), storage_options=self._opts)
@@ -181,10 +317,49 @@ class FabricDataLayer:
             filtered = [r for r in rows if r.get("meeting_id") == meeting_id]
             if instance_id:
                 filtered = [r for r in filtered if r.get("instance_id") == instance_id]
+            if not include_archived:
+                filtered = [r for r in filtered if r.get("status") != "Archived"]
             return filtered
         except Exception as exc:
             print(f"[fabric] get_agenda_items error: {exc}")
             return []
+
+    def get_archived_items(self, meeting_id: str, instance_id: Optional[str] = None) -> List[Dict]:
+        """Return only archived agenda items for a meeting/instance."""
+        if config.DEMO_MODE:
+            items = self._demo_agenda_items(meeting_id, instance_id, include_all=True)
+            return [r for r in items if r.get("status") == "Archived"]
+        try:
+            from deltalake import DeltaTable
+            dt = DeltaTable(_table_path("agenda_items"), storage_options=self._opts)
+            rows = dt.to_pyarrow_table().to_pylist()
+            filtered = [r for r in rows if r.get("meeting_id") == meeting_id]
+            if instance_id:
+                filtered = [r for r in filtered if r.get("instance_id") == instance_id]
+            return [r for r in filtered if r.get("status") == "Archived"]
+        except Exception as exc:
+            print(f"[fabric] get_archived_items error: {exc}")
+            return []
+
+    def archive_agenda_item(self, item_id: str) -> bool:
+        """Soft-delete an agenda item by setting status to Archived."""
+        if config.DEMO_MODE:
+            return True
+        try:
+            return self.update_agenda_item(item_id, status='Archived')
+        except Exception as exc:
+            print(f"[fabric] archive_agenda_item error: {exc}")
+            return False
+
+    def restore_agenda_item(self, item_id: str) -> bool:
+        """Restore an archived agenda item back to Pending."""
+        if config.DEMO_MODE:
+            return True
+        try:
+            return self.update_agenda_item(item_id, status='Pending')
+        except Exception as exc:
+            print(f"[fabric] restore_agenda_item error: {exc}")
+            return False
 
     def create_agenda_item(self, meeting_id: str, title: str, topic: str,
                            duration: int, presenter: str,
@@ -223,8 +398,9 @@ class FabricDataLayer:
         try:
             from deltalake import DeltaTable
             dt = DeltaTable(_table_path("agenda_items"), storage_options=self._opts)
-            updates = {k: f"'{v}'" for k, v in kwargs.items()}
-            dt.update(predicate=f"id = '{item_id}'", updates=updates)
+            safe_iid = _safe_id(item_id)
+            updates = {k: f"'{_safe_id(str(v))}'" for k, v in kwargs.items()}
+            dt.update(predicate=f"id = '{safe_iid}'", updates=updates)
             return True
         except Exception as exc:
             print(f"[fabric] update_agenda_item error: {exc}")
@@ -235,14 +411,15 @@ class FabricDataLayer:
             return True
         try:
             from deltalake import DeltaTable
+            safe_iid = _safe_id(item_id)
             # cascade: documents first
             try:
                 dt_docs = DeltaTable(_table_path("documents"), storage_options=self._opts)
-                dt_docs.delete(f"item_id = '{item_id}'")
+                dt_docs.delete(f"item_id = '{safe_iid}'")
             except Exception:
                 pass
             dt = DeltaTable(_table_path("agenda_items"), storage_options=self._opts)
-            dt.delete(f"id = '{item_id}'")
+            dt.delete(f"id = '{safe_iid}'")
             return True
         except Exception as exc:
             print(f"[fabric] delete_agenda_item error: {exc}")
@@ -292,7 +469,7 @@ class FabricDataLayer:
         try:
             from deltalake import DeltaTable
             dt = DeltaTable(_table_path("documents"), storage_options=self._opts)
-            dt.delete(f"id = '{doc_id}'")
+            dt.delete(f"id = '{_safe_id(doc_id)}'")
             return True
         except Exception as exc:
             print(f"[fabric] delete_document error: {exc}")
@@ -390,7 +567,8 @@ class FabricDataLayer:
         }
         return instances.get(meeting_id, [])
 
-    def _demo_agenda_items(self, meeting_id: str, instance_id: Optional[str] = None) -> List[Dict]:
+    def _demo_agenda_items(self, meeting_id: str, instance_id: Optional[str] = None,
+                           include_all: bool = False) -> List[Dict]:
         items_by_instance = {
             "inst_1": [
                 {"id": "itm_1", "meeting_id": "mtg_1", "instance_id": "inst_1",
@@ -405,6 +583,12 @@ class FabricDataLayer:
                  "topic": "Discussion on new tooling updates",
                  "status": "Pending", "item_order": 2,
                  "created_at": "2026-01-05T09:15:00"},
+                {"id": "itm_archived_1", "meeting_id": "mtg_1", "instance_id": "inst_1",
+                 "title": "Legacy Process Review (Archived)", "duration": 15,
+                 "presenter": "Bob Wilson",
+                 "topic": "Old process review — archived",
+                 "status": "Archived", "item_order": 99,
+                 "created_at": "2025-12-20T10:00:00"},
             ],
             "inst_3": [
                 {"id": "itm_3", "meeting_id": "mtg_1", "instance_id": "inst_3",

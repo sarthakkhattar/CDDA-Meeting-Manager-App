@@ -1,0 +1,13 @@
+# =====================================================================
+# Add these lines to your .env file for local testing
+# (keep your existing FABRIC_* and DEMO_MODE variables)
+# =====================================================================
+
+# This simulates being logged in as yourself locally
+DEV_USER_EMAIL=sarthak.khattar@lilly.com
+
+# Add your email to BOTH lists so you can test all features
+RLS_ADMINS=sarthak.khattar@lilly.com
+APPROVER_EMAILS=sarthak.khattar@lilly.com
+
+# After updating .env, restart the app: python app.py
