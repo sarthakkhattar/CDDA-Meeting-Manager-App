@@ -11,7 +11,8 @@ from dash.exceptions import PreventUpdate
 import json
 import base64
 import logging
-from datetime import datetime
+import calendar as cal_module
+from datetime import datetime, date
 from flask import request as flask_request
 
 import config
@@ -74,6 +75,101 @@ def _is_admin(email):
 
 def _is_approver(email):
     return bool(email and email != "anonymous" and email in config.APPROVER_EMAILS)
+
+
+# ============================================================================
+# Calendar helper
+# ============================================================================
+
+
+def _build_calendar(year, month, highlighted_dates, click_type, nav_prefix,
+                    selected_date=None, mgmt_mode=False):
+    """Build a month calendar as Dash HTML components.
+
+    year, month: which month to show
+    highlighted_dates: set of "YYYY-MM-DD" strings that have meetings
+    click_type: str -- pattern-matching type for clickable date cells
+    nav_prefix: str -- prefix for nav button IDs (e.g. "sidebar-cal")
+    selected_date: optional "YYYY-MM-DD" of the currently selected date
+    mgmt_mode: if True, all non-past dates are clickable (date management)
+    Returns: html.Div containing the full calendar with navigation
+    """
+    today_str = date.today().strftime("%Y-%m-%d")
+    cal = cal_module.Calendar(firstweekday=0)  # Monday start
+    month_days = cal.monthdayscalendar(year, month)
+
+    # Navigation row
+    month_name = cal_module.month_name[month]
+    nav = html.Div(
+        style=CAL_NAV,
+        children=[
+            html.Button(
+                "<", id=f"{nav_prefix}-prev", n_clicks=0, style=CAL_NAV_BTN,
+            ),
+            html.Span(
+                f"{month_name} {year}",
+                style={"fontWeight": "600", "fontSize": "14px", "color": "#0B1D3A"},
+            ),
+            html.Button(
+                ">", id=f"{nav_prefix}-next", n_clicks=0, style=CAL_NAV_BTN,
+            ),
+        ],
+    )
+
+    # Header row (day names)
+    headers = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    header_cells = [html.Div(d, style=CAL_HEADER) for d in headers]
+
+    # Date cells
+    day_cells = []
+    for week in month_days:
+        for day_num in week:
+            if day_num == 0:
+                day_cells.append(html.Div("", style=CAL_DAY_EMPTY))
+                continue
+
+            date_str = f"{year:04d}-{month:02d}-{day_num:02d}"
+            is_meeting = date_str in highlighted_dates
+            is_selected = date_str == selected_date
+            is_today = date_str == today_str
+            is_past = date_str < today_str
+
+            # Determine if clickable
+            clickable = False
+            if is_meeting:
+                clickable = True
+            elif mgmt_mode and not is_past:
+                clickable = True
+
+            # Determine style
+            if is_selected and is_meeting:
+                style = {**CAL_DAY_SELECTED}
+            elif is_meeting:
+                style = {**CAL_DAY_MEETING}
+            elif is_today:
+                style = {**CAL_DAY_TODAY}
+                if clickable:
+                    style["cursor"] = "pointer"
+            else:
+                style = {**CAL_DAY}
+                if clickable:
+                    style["cursor"] = "pointer"
+
+            if clickable:
+                cell = html.Div(
+                    str(day_num),
+                    id={"type": click_type, "index": date_str},
+                    n_clicks=0,
+                    style=style,
+                )
+            else:
+                cell = html.Div(str(day_num), style=style)
+
+            day_cells.append(cell)
+
+    grid = html.Div(children=header_cells + day_cells, style=CAL_GRID)
+
+    return html.Div([nav, grid])
 
 
 # ============================================================================
@@ -254,6 +350,76 @@ BACK_LINK = {
     "fontFamily": "inherit",
 }
 
+# Calendar styles
+
+CAL_GRID = {
+    "display": "grid",
+    "gridTemplateColumns": "repeat(7, 1fr)",
+    "gap": "2px",
+    "padding": "4px",
+}
+
+CAL_HEADER = {
+    "textAlign": "center",
+    "fontSize": "11px",
+    "fontWeight": "600",
+    "color": "#6b7789",
+    "padding": "4px 0",
+}
+
+CAL_DAY = {
+    "textAlign": "center",
+    "fontSize": "13px",
+    "padding": "6px 2px",
+    "borderRadius": "6px",
+    "cursor": "default",
+    "lineHeight": "1",
+}
+
+CAL_DAY_MEETING = {
+    **CAL_DAY,
+    "background": "#1E4EBC",
+    "color": "white",
+    "cursor": "pointer",
+    "fontWeight": "600",
+}
+
+CAL_DAY_SELECTED = {
+    **CAL_DAY,
+    "background": "#0B1D3A",
+    "color": "white",
+    "cursor": "pointer",
+    "fontWeight": "600",
+    "boxShadow": "0 0 0 2px #1E4EBC",
+}
+
+CAL_DAY_EMPTY = {
+    **CAL_DAY,
+    "color": "#d1d5db",
+}
+
+CAL_DAY_TODAY = {
+    **CAL_DAY,
+    "borderBottom": "2px solid #1E4EBC",
+}
+
+CAL_NAV = {
+    "display": "flex",
+    "justifyContent": "space-between",
+    "alignItems": "center",
+    "padding": "8px 12px",
+}
+
+CAL_NAV_BTN = {
+    "background": "none",
+    "border": "none",
+    "cursor": "pointer",
+    "fontSize": "18px",
+    "color": "#1E4EBC",
+    "padding": "4px 8px",
+    "fontFamily": "inherit",
+}
+
 # ============================================================================
 # Layout
 # ============================================================================
@@ -277,6 +443,8 @@ app.layout = html.Div(
         dcc.Store(id="show-archive", data=False),
         dcc.Store(id="managing-meeting", data=None),
         dcc.Store(id="date-mgmt-refresh", data=0),
+        dcc.Store(id="sidebar-cal-month", data={"year": 2026, "month": 1}),
+        dcc.Store(id="mgmt-cal-month", data={"year": 2026, "month": 1}),
         dcc.Interval(id="init-interval", interval=500, max_intervals=1),
 
         # ---- header --------------------------------------------------------
@@ -444,7 +612,7 @@ app.layout = html.Div(
                         ),
                         html.H3(id="date-mgmt-title", style={"marginTop": "16px", "color": "#0B1D3A"}),
 
-                        # Current dates list
+                        # Current dates calendar
                         html.Div(
                             style=CARD,
                             children=[
@@ -643,6 +811,7 @@ def render_meetings(meetings, is_admin):
         Output("selected-instance", "data"),
         Output("meetings-view", "style"),
         Output("agenda-view", "style"),
+        Output("sidebar-cal-month", "data"),
     ],
     [
         Input({"type": "mtg-card", "index": ALL}, "n_clicks"),
@@ -661,7 +830,7 @@ def navigate(card_clicks, _back, meetings):
 
     # back button
     if trigger == "back-btn.n_clicks":
-        return None, [], None, {"display": "block"}, {"display": "none"}
+        return None, [], None, {"display": "block"}, {"display": "none"}, no_update
 
     # meeting card clicked
     if not any(n for n in card_clicks if n):
@@ -682,7 +851,18 @@ def navigate(card_clicks, _back, meetings):
     # Auto-select first instance
     first_inst = instances[0] if instances else None
 
-    return mtg, instances, first_inst, {"display": "none"}, {"display": "block"}
+    # Determine calendar month from first instance
+    if instances:
+        first_date_str = instances[0].get("date", "")
+        try:
+            first_dt = datetime.strptime(first_date_str, "%Y-%m-%d")
+            cal_month_data = {"year": first_dt.year, "month": first_dt.month}
+        except (ValueError, TypeError):
+            cal_month_data = {"year": date.today().year, "month": date.today().month}
+    else:
+        cal_month_data = {"year": date.today().year, "month": date.today().month}
+
+    return mtg, instances, first_inst, {"display": "none"}, {"display": "block"}, cal_month_data
 
 
 # ------ sidebar title -------------------------------------------------------
@@ -697,72 +877,133 @@ def render_sidebar_title(meeting):
     return meeting.get("title", "")
 
 
-# ------ sidebar instances ---------------------------------------------------
+# ------ sidebar calendar ----------------------------------------------------
 
 @app.callback(
     Output("sidebar-instances", "children"),
-    [Input("instances-data", "data"), Input("selected-instance", "data")],
+    [
+        Input("instances-data", "data"),
+        Input("selected-instance", "data"),
+        Input("sidebar-cal-month", "data"),
+    ],
 )
-def render_sidebar(instances, selected):
-    """Build the sidebar list of meeting date instances."""
+def render_sidebar_calendar(instances, selected, cal_month):
+    """Build the sidebar calendar with meeting dates highlighted."""
     if not instances:
-        return html.P("No meeting dates.", style={"color": "#999", "padding": "16px", "fontSize": "13px"})
+        return html.P(
+            "No meeting dates.",
+            style={"color": "#999", "padding": "16px", "fontSize": "13px"},
+        )
 
-    sel_id = selected.get("id") if selected else None
-    dl = get_data_layer()
-    items = []
+    year = cal_month.get("year", 2026) if cal_month else 2026
+    month = cal_month.get("month", 1) if cal_month else 1
 
+    # Build set of highlighted dates
+    highlighted = set()
     for inst in instances:
-        # Count items and time for this instance
+        d = inst.get("date", "")
+        if d:
+            highlighted.add(d)
+
+    # Selected date
+    sel_date = selected.get("date") if selected else None
+
+    # Build calendar
+    calendar_widget = _build_calendar(
+        year, month, highlighted, "cal-date", "sidebar-cal",
+        selected_date=sel_date,
+    )
+
+    # Info panel for selected date
+    info_panel = None
+    if selected:
         try:
-            agenda = dl.get_agenda_items(inst["meeting_id"], instance_id=inst["id"])
+            dl = get_data_layer()
+            agenda = dl.get_agenda_items(
+                selected["meeting_id"], instance_id=selected["id"],
+            )
         except Exception:
             agenda = []
         item_count = len(agenda)
         time_used = sum(a.get("duration", 0) for a in agenda)
-
-        is_active = inst["id"] == sel_id
-        style = SB_ITEM_ACTIVE if is_active else SB_ITEM
-
-        items.append(
-            html.Div(
-                id={"type": "inst-card", "index": inst["id"]},
-                n_clicks=0,
-                style=style,
-                children=[
-                    html.Div(
-                        inst.get("display_text", inst.get("date", "")),
-                        style={"fontWeight": "600", "fontSize": "14px", "color": "#0B1D3A", "marginBottom": "4px"},
-                    ),
-                    html.Div(
-                        f"{item_count} item{'s' if item_count != 1 else ''}",
-                        style={"fontSize": "12px", "color": "#6b7789"},
-                    ),
-                    html.Div(
-                        f"{time_used} min used",
-                        style={"fontSize": "12px", "color": "#8a95a6"},
-                    ),
-                ],
-            )
+        display_text = selected.get("display_text", selected.get("date", ""))
+        info_panel = html.Div(
+            style={
+                "padding": "12px 16px",
+                "borderTop": "1px solid #e4e8ef",
+                "fontSize": "13px",
+                "color": "#0B1D3A",
+            },
+            children=[
+                html.Span(display_text, style={"fontWeight": "600"}),
+                html.Span(
+                    f" — {item_count} item{'s' if item_count != 1 else ''}, "
+                    f"{time_used} min used",
+                    style={"color": "#6b7789"},
+                ),
+            ],
         )
-    return items
+
+    return html.Div([calendar_widget, info_panel])
 
 
-# ------ select sidebar instance ---------------------------------------------
+# ------ sidebar calendar month navigation -----------------------------------
+
+@app.callback(
+    Output("sidebar-cal-month", "data", allow_duplicate=True),
+    Input("sidebar-cal-prev", "n_clicks"),
+    State("sidebar-cal-month", "data"),
+    prevent_initial_call=True,
+)
+def sidebar_prev_month(n, cal_month):
+    if not n:
+        raise PreventUpdate
+    year = cal_month["year"]
+    month = cal_month["month"] - 1
+    if month < 1:
+        month = 12
+        year -= 1
+    return {"year": year, "month": month}
+
+
+@app.callback(
+    Output("sidebar-cal-month", "data", allow_duplicate=True),
+    Input("sidebar-cal-next", "n_clicks"),
+    State("sidebar-cal-month", "data"),
+    prevent_initial_call=True,
+)
+def sidebar_next_month(n, cal_month):
+    if not n:
+        raise PreventUpdate
+    year = cal_month["year"]
+    month = cal_month["month"] + 1
+    if month > 12:
+        month = 1
+        year += 1
+    return {"year": year, "month": month}
+
+
+# ------ sidebar calendar click ----------------------------------------------
 
 @app.callback(
     Output("selected-instance", "data", allow_duplicate=True),
-    Input({"type": "inst-card", "index": ALL}, "n_clicks"),
+    Input({"type": "cal-date", "index": ALL}, "n_clicks"),
     State("instances-data", "data"),
     prevent_initial_call=True,
 )
-def select_instance(n_clicks, instances):
-    """Handle sidebar date click."""
+def sidebar_cal_click(n_clicks, instances):
+    """Handle sidebar calendar date click -- select that instance."""
     if not any(n for n in n_clicks if n):
         raise PreventUpdate
     ctx = dash.callback_context
     tid = json.loads(ctx.triggered[0]["prop_id"].split(".")[0])
-    inst = next((i for i in instances if i["id"] == tid["index"]), None)
+    clicked_date = tid["index"]
+
+    # Find the instance matching this date
+    inst = next(
+        (i for i in instances if i.get("date") == clicked_date),
+        None,
+    )
     if not inst:
         raise PreventUpdate
     return inst
@@ -1167,6 +1408,7 @@ def toggle_archive(n, current):
         Output("managing-meeting", "data"),
         Output("meetings-view", "style", allow_duplicate=True),
         Output("date-mgmt-view", "style"),
+        Output("mgmt-cal-month", "data"),
     ],
     Input({"type": "manage-dates-btn", "index": ALL}, "n_clicks"),
     State("meetings-data", "data"),
@@ -1181,7 +1423,21 @@ def open_date_manager(n_clicks, meetings):
     ctx = dash.callback_context
     tid = json.loads(ctx.triggered[0]["prop_id"].split(".")[0])
     mtg = next((m for m in meetings if m["id"] == tid["index"]), None)
-    return mtg, {"display": "none"}, {"display": "block"}
+
+    # Determine calendar month from first instance
+    try:
+        dl = get_data_layer()
+        instances = dl.get_meeting_instances(mtg["id"])
+        if instances:
+            first_date_str = instances[0].get("date", "")
+            first_dt = datetime.strptime(first_date_str, "%Y-%m-%d")
+            cal_month_data = {"year": first_dt.year, "month": first_dt.month}
+        else:
+            cal_month_data = {"year": date.today().year, "month": date.today().month}
+    except Exception:
+        cal_month_data = {"year": date.today().year, "month": date.today().month}
+
+    return mtg, {"display": "none"}, {"display": "block"}, cal_month_data
 
 
 # ------ close date management view ------------------------------------------
@@ -1213,55 +1469,140 @@ def render_date_mgmt_title(meeting):
     return meeting.get("title", "")
 
 
-# ------ render current dates list -------------------------------------------
+# ------ date management calendar --------------------------------------------
 
 @app.callback(
     Output("current-dates-list", "children"),
-    [Input("managing-meeting", "data"), Input("date-mgmt-refresh", "data")],
-    State("is-admin", "data"),
+    [
+        Input("managing-meeting", "data"),
+        Input("date-mgmt-refresh", "data"),
+        Input("mgmt-cal-month", "data"),
+    ],
 )
-def render_current_dates(meeting, _refresh, is_admin):
-    """List all scheduled dates for the managed meeting with delete buttons."""
+def render_mgmt_calendar(meeting, _refresh, cal_month):
+    """Render the date management calendar with existing dates highlighted."""
     if not meeting:
         return html.P("No meeting selected.", style={"color": "#666"})
+
     try:
         dl = get_data_layer()
         instances = dl.get_meeting_instances(meeting["id"])
     except Exception:
         instances = []
-    if not instances:
-        return html.P("No dates scheduled yet.", style={"color": "#666", "fontStyle": "italic"})
 
-    rows = []
+    year = cal_month.get("year", 2026) if cal_month else 2026
+    month = cal_month.get("month", 1) if cal_month else 1
+
+    # Build set of highlighted dates
+    highlighted = set()
     for inst in instances:
-        row_children = [
-            html.Span(
-                inst.get("display_text", inst.get("date", "")),
-                style={"fontWeight": "600", "fontSize": "14px", "color": "#0B1D3A"},
-            ),
-        ]
-        if is_admin:
-            row_children.append(
-                html.Button(
-                    "🗑 Remove",
-                    id={"type": "delete-date-btn", "index": inst["id"]},
-                    n_clicks=0,
-                    style={**BTN_DEL, "padding": "4px 12px", "fontSize": "12px"},
-                )
-            )
-        rows.append(
-            html.Div(
-                style={
-                    "display": "flex",
-                    "justifyContent": "space-between",
-                    "alignItems": "center",
-                    "padding": "8px 12px",
-                    "borderBottom": "1px solid #f0f0f0",
-                },
-                children=row_children,
-            )
+        d = inst.get("date", "")
+        if d:
+            highlighted.add(d)
+
+    # Build calendar in management mode (all non-past dates clickable)
+    calendar_widget = _build_calendar(
+        year, month, highlighted, "mgmt-cal-date", "mgmt-cal",
+        mgmt_mode=True,
+    )
+
+    if not instances:
+        hint = html.P(
+            "Click any date to add a meeting.",
+            style={"color": "#999", "fontStyle": "italic", "fontSize": "13px", "padding": "8px 0"},
         )
-    return html.Div(rows)
+    else:
+        count = len(instances)
+        hint = html.P(
+            f"{count} date{'s' if count != 1 else ''} scheduled. "
+            "Click a highlighted date to remove it, or an empty date to add it.",
+            style={"color": "#6b7789", "fontSize": "12px", "padding": "8px 0"},
+        )
+
+    return html.Div([calendar_widget, hint], style={"maxWidth": "500px"})
+
+
+# ------ date management calendar month navigation ---------------------------
+
+@app.callback(
+    Output("mgmt-cal-month", "data", allow_duplicate=True),
+    Input("mgmt-cal-prev", "n_clicks"),
+    State("mgmt-cal-month", "data"),
+    prevent_initial_call=True,
+)
+def mgmt_prev_month(n, cal_month):
+    if not n:
+        raise PreventUpdate
+    year = cal_month["year"]
+    month = cal_month["month"] - 1
+    if month < 1:
+        month = 12
+        year -= 1
+    return {"year": year, "month": month}
+
+
+@app.callback(
+    Output("mgmt-cal-month", "data", allow_duplicate=True),
+    Input("mgmt-cal-next", "n_clicks"),
+    State("mgmt-cal-month", "data"),
+    prevent_initial_call=True,
+)
+def mgmt_next_month(n, cal_month):
+    if not n:
+        raise PreventUpdate
+    year = cal_month["year"]
+    month = cal_month["month"] + 1
+    if month > 12:
+        month = 1
+        year += 1
+    return {"year": year, "month": month}
+
+
+# ------ date management calendar click --------------------------------------
+
+@app.callback(
+    Output("date-mgmt-refresh", "data", allow_duplicate=True),
+    Input({"type": "mgmt-cal-date", "index": ALL}, "n_clicks"),
+    [
+        State("managing-meeting", "data"),
+        State("date-mgmt-refresh", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def mgmt_cal_click(n_clicks, meeting, refresh):
+    """Handle date management calendar click -- add or remove a date."""
+    if not any(n for n in n_clicks if n) or not meeting:
+        raise PreventUpdate
+    user = _get_current_user()
+    if not _is_admin(user):
+        raise PreventUpdate
+
+    ctx = dash.callback_context
+    tid = json.loads(ctx.triggered[0]["prop_id"].split(".")[0])
+    clicked_date = tid["index"]  # "YYYY-MM-DD"
+
+    try:
+        dl = get_data_layer()
+        instances = dl.get_meeting_instances(meeting["id"])
+
+        # Check if this date already has an instance
+        existing = next(
+            (inst for inst in instances if inst.get("date") == clicked_date),
+            None,
+        )
+
+        if existing:
+            # Remove it (with cascade to delete agenda items and docs)
+            dl.delete_meeting_instance(existing["id"], cascade=True)
+        else:
+            # Add it
+            dt = datetime.strptime(clicked_date, "%Y-%m-%d")
+            display_text = dt.strftime("%d %b %Y")
+            dl.create_meeting_instance(meeting["id"], clicked_date, display_text)
+    except Exception:
+        pass
+
+    return refresh + 1
 
 
 # ------ generate recurring dates --------------------------------------------
@@ -1348,30 +1689,6 @@ def add_single_date(n, date_val, meeting, refresh):
     except Exception as exc:
         logger.exception("add_single_date failed")
         return html.Span("An error occurred. Please try again.", style={"color": "#dc3545"}), no_update
-
-
-# ------ delete meeting date -------------------------------------------------
-
-@app.callback(
-    Output("date-mgmt-refresh", "data", allow_duplicate=True),
-    Input({"type": "delete-date-btn", "index": ALL}, "n_clicks"),
-    State("date-mgmt-refresh", "data"),
-    prevent_initial_call=True,
-)
-def delete_date(n_clicks, refresh):
-    if not any(n for n in n_clicks if n):
-        raise PreventUpdate
-    user = _get_current_user()
-    if not _is_admin(user):
-        raise PreventUpdate
-    ctx = dash.callback_context
-    tid = json.loads(ctx.triggered[0]["prop_id"].split(".")[0])
-    try:
-        dl = get_data_layer()
-        dl.delete_meeting_instance(tid["index"], cascade=True)
-    except Exception:
-        pass
-    return refresh + 1
 
 
 # ============================================================================

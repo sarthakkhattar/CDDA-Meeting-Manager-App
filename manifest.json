@@ -14,10 +14,19 @@
   },
   "files": {
     "app.py": {
-      "checksum": "aef754bd4af3b57aed898269345b7acb"
+      "checksum": "c335f468abf163e94ced3113f8c1e97d"
+    },
+    "cdda-bundle.tar.gz": {
+      "checksum": "8eff277679466d22b66b1f17ecc59b61"
     },
     "config.py": {
       "checksum": "32dbac6ff911f64b32996b8d24f25525"
+    },
+    "deploy.sh": {
+      "checksum": "aea80926ce77e0feb277211db90be3ab"
+    },
+    "deploy_now.ps1": {
+      "checksum": "c925e3549f0b0ee0cd462c2ab0d6d3d1"
     },
     "fabric_graph.py": {
       "checksum": "35b2e4969347fe47b88f71a36d0e4e6c"
@@ -26,7 +35,7 @@
       "checksum": "6765a291567af369aa2f38c8c5c01f23"
     },
     "manifest.json": {
-      "checksum": "5bcbcb32955c51f3acb8ffd3c0afb79b"
+      "checksum": "7662d0506550f40e44cc5a27de894e51"
     },
     "README.md": {
       "checksum": "f1d6b3c504bc593014daf1d713a54730"
