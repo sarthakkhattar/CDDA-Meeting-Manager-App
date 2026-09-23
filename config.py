@@ -34,3 +34,20 @@ RLS_ADMINS = [e.strip().lower() for e in os.getenv('RLS_ADMINS', '').split(',') 
 APP_NAME = 'CDDA Meeting Manager'
 TIME_SLOTS = [15, 30, 45, 60]
 
+# ============================================================================
+# Presenter Directory
+# ============================================================================
+# Hardcoded for now — future: pull from SQL/API
+PRESENTERS = [
+    {"name": "Sarthak Khattar", "email": "sarthak.khattar@lilly.com"},
+]
+
+# Build lookup dicts for fast access
+PRESENTER_EMAIL_TO_NAME = {p["email"].lower(): p["name"] for p in PRESENTERS}
+PRESENTER_NAME_TO_EMAIL = {p["name"]: p["email"].lower() for p in PRESENTERS}
+
+# ============================================================================
+# Email Notifications (Microsoft Graph)
+# ============================================================================
+GRAPH_NOTIFICATIONS_ENABLED = os.getenv('GRAPH_NOTIFICATIONS_ENABLED', '0').lower() in ('1', 'true', 'yes')
+NOTIFICATION_FROM_EMAIL = os.getenv('NOTIFICATION_FROM_EMAIL', '')

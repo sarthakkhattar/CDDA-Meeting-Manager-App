@@ -17,6 +17,7 @@ from flask import request as flask_request
 
 import config
 from fabric_graph import get_data_layer, generate_recurring_dates
+from email_service import send_approval_email
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,13 @@ def _is_admin(email):
 
 def _is_approver(email):
     return bool(email and email != "anonymous" and email in config.APPROVER_EMAILS)
+
+
+def _presenter_display_name(value):
+    """Map presenter email to display name, or return as-is for legacy names."""
+    if not value:
+        return "TBD"
+    return config.PRESENTER_EMAIL_TO_NAME.get(value.lower(), value)
 
 
 # ============================================================================
@@ -577,7 +585,13 @@ app.layout = html.Div(
                                                                 ]),
                                                                 html.Div([
                                                                     html.Label("Presenter", style=LABEL),
-                                                                    dcc.Input(id="inp-presenter", placeholder="Presenter name", style={**INPUT, "marginBottom": "0"}),
+                                                                    dcc.Dropdown(
+                                                                        id="inp-presenter",
+                                                                        options=[{"label": p["name"], "value": p["email"]} for p in config.PRESENTERS],
+                                                                        placeholder="Select presenter...",
+                                                                        clearable=True,
+                                                                        style={"marginBottom": "0"},
+                                                                    ),
                                                                 ]),
                                                             ],
                                                         ),
@@ -1166,7 +1180,7 @@ def render_agenda(instance, meeting, show_archive, is_admin, is_approver):
                                         style={"marginRight": "16px", "fontSize": "13px", "color": "#1E4EBC"},
                                     ),
                                     html.Span(
-                                        f"👤 {item.get('presenter', 'TBD')}",
+                                        f"👤 {_presenter_display_name(item.get('presenter', ''))}",
                                         style={"fontSize": "13px", "color": "#666"},
                                     ),
                                 ]),
@@ -1300,7 +1314,7 @@ def add_item(n, title, topic, duration, presenter, meeting, instance):
             instance_id=instance.get("id") if instance else None,
         )
         refreshed = {**instance, "_r": instance.get("_r", 0) + 1}
-        return html.Span("✓ Item added!", style={"color": "#198754"}), refreshed, "", "", ""
+        return html.Span("✓ Item added!", style={"color": "#198754"}), refreshed, "", "", None
     except Exception as exc:
         logger.exception("add_item failed")
         return (
@@ -1342,11 +1356,11 @@ def archive_item(n_clicks, instance):
 @app.callback(
     Output("selected-instance", "data", allow_duplicate=True),
     Input({"type": "approve-btn", "index": ALL}, "n_clicks"),
-    State("selected-instance", "data"),
+    [State("selected-instance", "data"), State("selected-meeting", "data")],
     prevent_initial_call=True,
 )
-def approve_item(n_clicks, instance):
-    """Approve an agenda item."""
+def approve_item(n_clicks, instance, meeting):
+    """Approve an agenda item and notify the presenter."""
     if not any(n for n in n_clicks if n) or not instance:
         raise PreventUpdate
     user = _get_current_user()
@@ -1357,6 +1371,26 @@ def approve_item(n_clicks, instance):
     try:
         dl = get_data_layer()
         dl.set_approval(tid["index"], user, True)
+
+        # Send email notification to presenter
+        try:
+            items = dl.get_agenda_items(
+                meeting["id"], instance_id=instance["id"], include_archived=True
+            )
+            item = next((i for i in items if i["id"] == tid["index"]), None)
+            if item and item.get("presenter"):
+                presenter_email = item["presenter"]
+                presenter_name = _presenter_display_name(presenter_email)
+                send_approval_email(
+                    to_email=presenter_email,
+                    to_name=presenter_name,
+                    item_title=item.get("title", ""),
+                    meeting_title=meeting.get("title", ""),
+                    date_text=instance.get("display_text", ""),
+                    approved_by=config.PRESENTER_EMAIL_TO_NAME.get(user, user),
+                )
+        except Exception as exc:
+            logger.warning(f"Email notification failed: {exc}")
     except Exception:
         pass
     return {**instance, "_r": instance.get("_r", 0) + 1}
